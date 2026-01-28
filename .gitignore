@@ -1,0 +1,14 @@
+node_modules/
+.env
+.DS_Store
+
+# Uploaded zip included client/node_modules (should not be committed)
+client/node_modules/
+dist/
+client/dist/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

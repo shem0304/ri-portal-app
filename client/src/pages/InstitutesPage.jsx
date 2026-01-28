@@ -1,0 +1,293 @@
+import React from 'react';
+import {
+  Box, Card, CardActions, CardContent, Chip, Grid, Link, MenuItem, Select, TextField, Typography, Button, Stack,  Divider
+} from '@mui/material';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { apiFetch } from '../api';
+
+// Accept common API shapes:
+// - Plain array: [...]
+// - Object with items: { items: [...] }
+// - Buckets: { nrc: [...], nct: [...] }
+function normalizeItems(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (payload && Array.isArray(payload.items)) return payload.items;
+  if (payload && Array.isArray(payload.nrc)) return payload.nrc;
+  if (payload && Array.isArray(payload.nct)) return payload.nct;
+  if (payload && Array.isArray(payload.nst)) return payload.nst; // legacy fallback
+  return [];
+}
+
+function InstituteCard({ name, region, url, desc }) {
+  return (
+    <Card variant='outlined' sx={{ borderRadius: 3 }}>
+      <CardContent>
+        <Typography variant='h6' sx={{ fontWeight: 700 }}>{name}</Typography>
+        <Typography variant='body2' color='text.secondary'>{region}</Typography>
+        {desc ? <Typography variant='body2' sx={{ mt: 1 }}>{desc}</Typography> : null}
+        {url ? (
+          <Link href={url} target='_blank' rel='noreferrer' sx={{ mt: 1, display: 'inline-block' }}>{url}</Link>
+        ) : null}
+      </CardContent>
+      <CardActions sx={{ px: 2, pb: 2 }}>
+        {url ? (
+          <Button size='small' variant='contained' endIcon={<OpenInNewIcon />} href={url} target='_blank' rel='noreferrer'>열기</Button>
+        ) : null}
+        {region ? <Chip size='small' label={region} /> : null}
+      </CardActions>
+    </Card>
+  );
+}
+
+export default function InstitutesPage() {
+  const [query, setQuery] = React.useState('');
+  const [scope, setScope] = React.useState('all'); // all | local | national
+  const [region, setRegion] = React.useState('전체');
+  const [local, setLocal] = React.useState([]);
+  const [national, setNational] = React.useState([]);
+  const [press, setPress] = React.useState([]);
+  const [pressNote, setPressNote] = React.useState('');
+  const PRESS_MORE_URL = 'https://www.korea.kr/briefing/pressReleaseList.do';
+  const POLICY_MORE_URL = 'https://www.korea.kr/news/policyNewsList.do';
+  const [policyNews, setPolicyNews] = React.useState([]);
+  const [policyNote, setPolicyNote] = React.useState('');
+
+    const [nationalGroup, setNationalGroup] = React.useState('전체'); // 전체 | NRC | NCT
+  React.useEffect(() => {
+  (async () => {
+    try {
+      const [l, p, n] = await Promise.all([
+        apiFetch('/api/institutes/local'),
+        apiFetch('/api/press/latest?limit=10', { cache: 'no-store' }),
+        apiFetch('/api/news/policy/latest?limit=10', { cache: 'no-store' }),
+      ]);
+      setLocal(normalizeItems(l));
+      setPress(normalizeItems(p));
+      setPressNote((p && p.note) || '');
+      setPolicyNews(normalizeItems(n));
+      setPolicyNote((n && n.note) || '');
+    } catch (e) {
+      // Keep page usable even if external news fetch fails
+      console.error(e);
+    }
+  })();
+}, []);
+React.useEffect(() => {
+  if (scope !== 'national' && scope !== 'all') return;
+
+  (async () => {
+    const endpoint =
+      scope === 'all'
+        ? '/api/institutes/national'
+        : (nationalGroup === 'NRC'
+            ? '/api/institutes/national/nrc'
+            : nationalGroup === 'NCT'
+              ? '/api/institutes/national/nct'
+              : '/api/institutes/national');
+
+    const data = await apiFetch(endpoint);
+    setNational(normalizeItems(data));
+  })();
+}, [scope, nationalGroup]);
+
+React.useEffect(() => {
+  if (scope !== 'national') setNationalGroup('전체');
+}, [scope]);
+
+React.useEffect(() => {
+  // leaving national scope -> reset second combo
+  if (scope !== 'national') setNationalGroup('전체');
+}, [scope]);
+
+  const regions = React.useMemo(() => {
+    const set = new Set(local.map(i => i.region).filter(Boolean));
+    return ['전체', ...Array.from(set)];
+  }, [local]);
+
+  const merged = React.useMemo(() => {
+    const all = [];
+    if (scope === 'all' || scope === 'local') {
+      for (const i of local) all.push({ ...i, scope: 'local' });
+    }
+    if (scope === 'all' || scope === 'national') {
+      // national has group + desc
+      for (const i of national) {
+        const region = i.region || i.group || '정부출연';
+        all.push({ ...i, region, scope: 'national' });
+      }
+}
+    return all;
+  }, [local, national, scope]);
+
+  const filtered = React.useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return merged.filter(it => {
+      if (region !== '전체' && it.scope === 'local' && it.region !== region) return false;
+      if (q) {
+        const hay = `${it.name} ${it.region} ${it.desc || ''}`.toLowerCase();
+        return hay.includes(q);
+      }
+      return true;
+    });
+  }, [merged, query, region]);
+
+  return (
+    <Box>
+      <Card sx={{ borderRadius: 4 }}>
+        <CardContent>
+          <Typography variant='h6' sx={{ fontWeight: 800 }}>기관</Typography>
+          <Divider sx={{ my: 2 }} />
+
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={8}>
+
+<Grid container spacing={2} sx={{ mb: 2 }}>
+  <Grid item xs={12} md={6}>
+    <Card variant="outlined" sx={{ borderRadius: 3 }}>
+      <CardContent sx={{ pb: 1 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>최신 정부 보도자료</Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => window.open(PRESS_MORE_URL, '_blank', 'noopener,noreferrer')}
+          >
+            더보기
+          </Button>
+        </Stack>
+
+        <Stack spacing={1}>
+          {press.slice(0, 10).map((it, i) => (
+            <Card
+              key={i}
+              variant="outlined"
+              sx={{ borderRadius: 3, cursor: 'pointer' }}
+              onClick={() => it.link && window.open(it.link, '_blank', 'noopener,noreferrer')}
+            >
+              <CardContent sx={{ py: 1.5 }}>
+                <Typography sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                  {it.title}
+                </Typography>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+
+        {press.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            데이터를 불러오지 못했습니다. (서버 /api/press/latest 확인)
+          </Typography>
+        ) : null}
+        {pressNote ? (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            {pressNote}
+          </Typography>
+        ) : null}
+      </CardContent>
+    </Card>
+  </Grid>
+
+  <Grid item xs={12} md={6}>
+    <Card variant="outlined" sx={{ borderRadius: 3 }}>
+      <CardContent sx={{ pb: 1 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Typography variant="h6" sx={{ fontWeight: 800 }}>최신 정책뉴스</Typography>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => window.open(POLICY_MORE_URL, '_blank', 'noopener,noreferrer')}
+          >
+            더보기
+          </Button>
+        </Stack>
+
+        <Stack spacing={1}>
+          {policyNews.slice(0, 10).map((it, i) => (
+            <Card
+              key={i}
+              variant="outlined"
+              sx={{ borderRadius: 3, cursor: 'pointer' }}
+              onClick={() => it.link && window.open(it.link, '_blank', 'noopener,noreferrer')}
+            >
+              <CardContent sx={{ py: 1.5 }}>
+                <Typography sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                  {it.title}
+                </Typography>
+              </CardContent>
+            </Card>
+          ))}
+        </Stack>
+
+        {policyNews.length === 0 ? (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            데이터를 불러오지 못했습니다. (서버 /api/news/policy/latest 확인)
+          </Typography>
+        ) : null}
+        {policyNote ? (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+            {policyNote}
+          </Typography>
+        ) : null}
+      </CardContent>
+    </Card>
+  </Grid>
+</Grid>
+
+
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
+                <TextField
+                  fullWidth
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder='예: 경기, 전남, 연구원 이름…'
+                />
+                <Select value={scope} onChange={(e) => setScope(e.target.value)} sx={{ minWidth: 160 }}>
+                  <MenuItem value='all'>전체</MenuItem>
+                  <MenuItem value='local'>지자체</MenuItem>
+                  <MenuItem value='national'>정부출연</MenuItem>
+                </Select>
+                {scope === 'national' ? (
+                  <Select value={nationalGroup} onChange={(e) => setNationalGroup(e.target.value)} sx={{ minWidth: 160 }}>
+                    <MenuItem value='전체'>전체</MenuItem>
+                    <MenuItem value='NRC'>NRC</MenuItem>
+                    <MenuItem value='NCT'>NCT</MenuItem>
+                  </Select>
+                ) : (
+                  <Select value={region} onChange={(e) => setRegion(e.target.value)} sx={{ minWidth: 160 }}>
+                    {regions.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+                  </Select>
+                )}
+              </Stack>
+
+              {scope === 'national' ? null : (
+              <Stack direction='row' spacing={1} sx={{ flexWrap: 'wrap', mb: 2 }}>
+                {regions.slice(0, 12).map(r => (
+                  <Chip
+                    key={r}
+                    label={r}
+                    clickable
+                    onClick={() => setRegion(r)}
+                    color={region === r ? 'primary' : 'default'}
+                    sx={{ mb: 1 }}
+                  />
+                ))}
+              </Stack>
+            )}
+
+              <Typography variant='caption' color='text.secondary'>기관 데이터는 local_institutes.json(지자체), national_institutes.json(정부출연)에서 로딩합니다.</Typography>
+              <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>현재 {filtered.length}개</Typography>
+
+              <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                {filtered.map((it) => (
+                  <Grid key={`${it.scope}-${it.name}`} item xs={12} sm={6}>
+                    <InstituteCard {...it} />
+                  </Grid>
+                ))}
+              </Grid>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
+    </Box>
+  );
+}
