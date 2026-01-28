@@ -9,17 +9,15 @@ import {
   TableHead,
   TableRow,
   Typography,
-  Stack,
 } from '@mui/material';
-import { useNavigate, useOutletContext, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { apiFetch } from '../../api';
 import { useAuth } from '../../state/AuthContext.jsx';
 
 export default function RelatedReports() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const keyword = (searchParams.get('keyword') || '').trim();
+  const location = useLocation();
   const { trendFilters } = useOutletContext();
   const f = trendFilters || { scope: 'all', institute: '', year: '', q: '' };
 
@@ -27,19 +25,10 @@ export default function RelatedReports() {
   const [error, setError] = React.useState('');
   const [data, setData] = React.useState(null);
 
-  const sortedItems = React.useMemo(() => {
-    const items = Array.isArray(data?.items) ? [...data.items] : [];
-    // sort: most recent year first, then title
-    items.sort((a, b) => {
-      const ya = Number(a?.year || 0);
-      const yb = Number(b?.year || 0);
-      if (yb !== ya) return yb - ya;
-      const ta = String(a?.title || '');
-      const tb = String(b?.title || '');
-      return ta.localeCompare(tb, 'ko');
-    });
-    return items;
-  }, [data]);
+  const keywordFromUrl = React.useMemo(() => {
+    const p = new URLSearchParams(location.search);
+    return (p.get('keyword') || '').trim();
+  }, [location.search]);
 
   React.useEffect(() => {
     let alive = true;
@@ -53,16 +42,17 @@ export default function RelatedReports() {
       setError('');
       try {
         const params = new URLSearchParams();
-        if (keyword) params.set('keyword', keyword);
         if (f.q) params.set('q', f.q);
         if (f.scope) params.set('scope', f.scope);
-        if (f.institute) params.set('institute', f.institute);
+        // Only constrain by institute when a specific institute is selected (not '기관 전체')
+        if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
         if (f.year) params.set('year', f.year);
         params.set('limit', '100');
         params.set('offset', '0');
 
-        const res = keyword
-          ? await apiFetch(`/api/trends/related?${params.toString()}`, { auth: true })
+        // If navigated from Network (keyword selected), show only reports matched to that keyword.
+        const res = keywordFromUrl
+          ? await apiFetch(`/api/trends/related?keyword=${encodeURIComponent(keywordFromUrl)}&${params.toString()}`, { auth: true })
           : await apiFetch(`/api/reports/search?${params.toString()}`, { auth: true });
         if (!alive) return;
         setData(res);
@@ -76,21 +66,17 @@ export default function RelatedReports() {
     })();
 
     return () => { alive = false; };
-  }, [user, keyword, f.scope, f.institute, f.year, f.q]);
+  }, [user, keywordFromUrl, f.scope, f.institute, f.year, f.q]);
 
   return (
     <Box>
       <Paper variant='outlined' sx={{ p: 2, borderRadius: 3 }}>
-        <Stack direction='row' spacing={1} alignItems='center' sx={{ mb: 1 }}>
-          <Typography variant='subtitle1' sx={{ fontWeight: 800, flexGrow: 1 }}>
-            {keyword ? '관련 보고서' : '보고서 목록'} (로그인 필요)
-          </Typography>
-          {keyword ? (
-            <Button size='small' variant='outlined' onClick={() => navigate('/trends/related')}>키워드 해제</Button>
-          ) : null}
-        </Stack>
+        <Typography variant='subtitle1' sx={{ fontWeight: 800, mb: 1 }}>
+          보고서 목록 (로그인 필요)
+        </Typography>
         <Typography variant='caption' color='text.secondary'>
-          {keyword ? `선택 키워드(“${keyword}”)에 매칭되는 관련 보고서를 조회합니다.` : '상단의 공통 조회 조건(연구기관 구분/기관/연도/검색어)으로 보고서를 조회합니다.'}
+          상단의 공통 조회 조건(연구기관 구분/기관/연도/검색어)으로 보고서를 조회합니다.
+          {keywordFromUrl ? ` (선택 키워드: ${keywordFromUrl})` : ''}
         </Typography>
 
         {!user ? (
@@ -122,7 +108,7 @@ export default function RelatedReports() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {sortedItems.map((r) => (
+                {data.items.map((r) => (
                   <TableRow key={r.id} hover>
                     <TableCell>{r.year}</TableCell>
                     <TableCell>{r.institute}</TableCell>
