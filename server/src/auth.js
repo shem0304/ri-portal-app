@@ -1,175 +1,42 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import { JWT_SECRET, JWT_EXPIRES_IN, DATA_DIR, ensureDataDir } from './config.js';
 
-// Parse cookies without external deps
-function parseCookies(cookieHeader) {
-  const out = {};
-  if (!cookieHeader) return out;
-  for (const part of String(cookieHeader).split(';')) {
-    const idx = part.indexOf('=');
-    if (idx < 0) continue;
-    const k = part.slice(0, idx).trim();
-    const v = part.slice(idx + 1).trim();
-    if (!k) continue;
-    out[k] = decodeURIComponent(v);
-  }
-  return out;
-}
-
 const USERS_FILE = process.env.USERS_FILE || path.join(DATA_DIR, 'users.json');
 
-// Remote user storage (recommended for Render free tier)
-const DEBUG_REMOTE_USERS = process.env.DEBUG_REMOTE_USERS === '1';
-const STORAGE_TOKEN = process.env.STORAGE_TOKEN || process.env.USERS_STORAGE_TOKEN || '';
-const RAW_REMOTE_READ = process.env.USERS_REMOTE_URL || '';
-const RAW_REMOTE_WRITE = process.env.USERS_REMOTE_WRITE_URL || '';
-
-let USERS_REMOTE_READ_URL = RAW_REMOTE_READ;
-let USERS_REMOTE_WRITE_URL = RAW_REMOTE_WRITE;
-
-// Fix common misconfiguration: READ=php, WRITE=json -> swap to READ=json, WRITE=php
-if (USERS_REMOTE_READ_URL && USERS_REMOTE_WRITE_URL) {
-  const readIsPhp = /\.php(\?|#|$)/i.test(USERS_REMOTE_READ_URL);
-  const writeIsJson = /\.json(\?|#|$)/i.test(USERS_REMOTE_WRITE_URL);
-  const readIsJson = /\.json(\?|#|$)/i.test(USERS_REMOTE_READ_URL);
-  const writeIsPhp = /\.php(\?|#|$)/i.test(USERS_REMOTE_WRITE_URL);
-  if (readIsPhp && writeIsJson) {
-    const tmp = USERS_REMOTE_READ_URL;
-    USERS_REMOTE_READ_URL = USERS_REMOTE_WRITE_URL;
-    USERS_REMOTE_WRITE_URL = tmp;
-  } else if (readIsJson && writeIsPhp) {
-    // ok
+export function readUsers() {
+  ensureDataDir();
+  if (!fs.existsSync(USERS_FILE)) {
+    const hash = bcrypt.hashSync('admin1234', 10);
+    const seed = {
+      users: [
+        {
+          id: 'u_admin',
+          username: 'admin',
+          password_hash: hash,
+          role: 'admin',
+          approved: true,
+          created_at: new Date().toISOString(),
+          approved_at: new Date().toISOString(),
+          approved_by: 'system',
+        },
+      ],
+    };
+    fs.writeFileSync(USERS_FILE, JSON.stringify(seed, null, 2), 'utf-8');
+    return seed;
   }
-}
-
-// If only one is set, use it for both (php can handle GET/POST)
-if (!USERS_REMOTE_READ_URL && USERS_REMOTE_WRITE_URL) USERS_REMOTE_READ_URL = USERS_REMOTE_WRITE_URL;
-if (!USERS_REMOTE_WRITE_URL && USERS_REMOTE_READ_URL) USERS_REMOTE_WRITE_URL = USERS_REMOTE_READ_URL;
-
-function logRemote(...args) {
-  try { if (DEBUG_REMOTE_USERS) console.log('[users/remote]', ...args); } catch {}
-}
-
-// Always print config once at startup so you can verify envs are applied
-console.log('[users/remote] auth.js loaded', {
-  readUrl: USERS_REMOTE_READ_URL || '(empty)',
-  writeUrl: USERS_REMOTE_WRITE_URL || '(empty)',
-  token: STORAGE_TOKEN ? 'set' : 'missing',
-  localFile: USERS_FILE,
-});
-
-function curlJson(method, url, body) {
-  try {
-    const args = ['-sS', '-L', '--max-time', '10', '-w', '
-%{http_code}'];
-    if (method && method !== 'GET') args.push('-X', method);
-    if (STORAGE_TOKEN) args.push('-H', `X-Storage-Token: ${STORAGE_TOKEN}`);
-    if (body != null) {
-      args.push('-H', 'Content-Type: application/json');
-      args.push('--data-binary', JSON.stringify(body));
-    }
-    args.push(url);
-
-    logRemote('curl', method, url, { hasToken: !!STORAGE_TOKEN, bytes: body != null ? JSON.stringify(body).length : 0 });
-    const out = execFileSync('curl', args, { encoding: 'utf-8' });
-
-    const i = out.lastIndexOf('
-');
-    const text = i >= 0 ? out.slice(0, i) : out;
-    const code = i >= 0 ? Number(out.slice(i + 1).trim()) : 0;
-
-    let parsed = null;
-    try { parsed = text ? JSON.parse(text) : null; } catch { parsed = null; }
-
-    logRemote('curl:resp', method, url, { status: code, ok: code >= 200 && code < 300 });
-    return { ok: code >= 200 && code < 300, status: code, data: parsed, raw: text };
-  } catch (e) {
-    logRemote('curl:error', method, url, String(e && e.message ? e.message : e));
-    return { ok: false, status: 0, data: null, raw: null };
-  }
-}
-
-function normalizeUsersDoc(parsed) {
+  const raw = fs.readFileSync(USERS_FILE, 'utf-8');
+  const parsed = JSON.parse(raw);
+  // Backward/forward compatible: allow either { users: [...] } or plain [...]
   if (Array.isArray(parsed)) return { users: parsed };
   if (parsed && Array.isArray(parsed.users)) return parsed;
   return { users: [] };
 }
 
-function seedAdminDoc() {
-  const hash = bcrypt.hashSync('admin1234', 10);
-  return {
-    users: [
-      {
-        id: 'u_admin',
-        username: 'admin',
-        password_hash: hash,
-        role: 'admin',
-        approved: true,
-        created_at: new Date().toISOString(),
-        approved_at: new Date().toISOString(),
-        approved_by: 'seed',
-        status: 'approved',
-      },
-    ],
-  };
-}
-
-
-export function readUsers() {
-  ensureDataDir();
-
-  // Prefer remote storage when configured
-  if (USERS_REMOTE_READ_URL) {
-    const r = curlJson('GET', USERS_REMOTE_READ_URL);
-    if (r.ok && r.status === 200) {
-      const doc = normalizeUsersDoc(r.data);
-      logRemote('readUsers:remote:ok', { status: r.status, users: (doc.users || []).length });
-      return doc;
-    }
-
-    // If remote doesn't exist yet, seed admin and attempt to write once
-    if (r.status === 404 || r.data == null) {
-      const seed = seedAdminDoc();
-      if (USERS_REMOTE_WRITE_URL) {
-        const w = curlJson('POST', USERS_REMOTE_WRITE_URL, seed);
-        logRemote('writeUsers:remote:seed', { status: w.status, ok: w.ok });
-      }
-      return seed;
-    }
-
-    logRemote('readUsers:remote:fail', { status: r.status });
-    // fall back to local
-  }
-
-  // Local fallback
-  if (!fs.existsSync(USERS_FILE)) {
-    const seed = seedAdminDoc();
-    fs.writeFileSync(USERS_FILE, JSON.stringify(seed, null, 2), 'utf-8');
-    return seed;
-  }
-
-  const raw = fs.readFileSync(USERS_FILE, 'utf-8');
-  const parsed = raw ? JSON.parse(raw) : null;
-  return normalizeUsersDoc(parsed);
-}
-
 function writeUsers(doc) {
-  ensureDataDir();
-
-  if (USERS_REMOTE_WRITE_URL) {
-    const r = curlJson('POST', USERS_REMOTE_WRITE_URL, doc);
-    if (r.ok) {
-      logRemote('writeUsers:remote:ok', { status: r.status, users: (doc && doc.users ? doc.users.length : 0) });
-      return;
-    }
-    logRemote('writeUsers:remote:fail', { status: r.status });
-  }
-
   fs.writeFileSync(USERS_FILE, JSON.stringify(doc, null, 2), 'utf-8');
 }
 
@@ -179,25 +46,14 @@ export function issueToken(user) {
 }
 
 export function authMiddleware(req, res, next) {
+  const hdr = req.headers.authorization || '';
+  const m = hdr.match(/^Bearer\s+(.+)$/i);
+  if (!m) {
+    req.user = null;
+    return next();
+  }
   try {
-    const authHdr = req.headers.authorization || '';
-    let token = '';
-    const m = authHdr.match(/^Bearer\s+(.+)$/i);
-    if (m) token = m[1].trim();
-
-    if (!token) token = String(req.headers['x-access-token'] || req.headers['x-auth-token'] || '').trim();
-
-    if (!token) {
-      const cookies = parseCookies(req.headers.cookie || '');
-      token = (cookies.token || cookies.authToken || cookies.access_token || '').trim();
-    }
-
-    if (!token) {
-      req.user = null;
-      return next();
-    }
-
-    const payload = jwt.verify(token, JWT_SECRET);
+    const payload = jwt.verify(m[1], JWT_SECRET);
     req.user = payload;
   } catch {
     req.user = null;

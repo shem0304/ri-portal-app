@@ -584,21 +584,160 @@ function reloadStopwords() {
 }
 
 const USERS_PATH = path.join(DATA_DIR, "users.json");
-function readUsers() {
+
+// -----------------------------
+// Remote users store (optional)
+// -----------------------------
+// If DEBUG_REMOTE_USERS=1 (or USERS_REMOTE_URL is set), users are loaded/saved via a remote endpoint.
+// The remote endpoint must support:
+//   - GET  -> returns users.json (either { users:[...] } or [...] )
+//   - POST -> accepts raw JSON and overwrites users.json
+// Provided users.php matches this contract and requires header: X-Storage-Token
+const REMOTE_USERS_ENABLED =
+  String(process.env.DEBUG_REMOTE_USERS || "").trim() === "1" || !!process.env.USERS_REMOTE_URL;
+
+const REMOTE_USERS_URL = process.env.USERS_REMOTE_URL || ""; // e.g. http://.../storage/users.php
+const REMOTE_USERS_WRITE_URL_RAW = process.env.USERS_REMOTE_WRITE_URL || ""; // optional override
+const REMOTE_USERS_WRITE_URL =
+  REMOTE_USERS_WRITE_URL_RAW && REMOTE_USERS_WRITE_URL_RAW.trim().toLowerCase().endsWith(".php")
+    ? REMOTE_USERS_WRITE_URL_RAW
+    : REMOTE_USERS_URL;
+
+const STORAGE_TOKEN = process.env.STORAGE_TOKEN || "";
+
+function parseUsersDoc(v) {
+  if (Array.isArray(v)) return v;
+  if (v && Array.isArray(v.users)) return v.users;
+  return [];
+}
+
+function serializeUsersDoc(users) {
+  // Persist as an object for forward-compatibility with older server code and your current remote users.json
+  return JSON.stringify({ users }, null, 2);
+}
+
+function readUsersLocal() {
   if (!fs.existsSync(USERS_PATH)) return [];
   try {
     const v = readJson(USERS_PATH);
-    return Array.isArray(v) ? v : [];
+    return parseUsersDoc(v);
   } catch (err) {
-    console.error('[auth] Failed to read users.json:', err?.message || err);
+    console.error("[auth] Failed to read users.json:", err?.message || err);
     return [];
   }
 }
 
-function writeUsers(users) {
-  // Best-effort persistence. On some platforms (read-only FS) this will fail.
+async function httpRequestText(method, url, { timeoutMs = 12000, headers = {}, body = null } = {}) {
+  return new Promise((resolve, reject) => {
+    const u = new URL(url);
+    const lib = u.protocol === "http:" ? http : https;
+
+    const req = lib.request(
+      {
+        method,
+        protocol: u.protocol,
+        hostname: u.hostname,
+        port: u.port || (u.protocol === "http:" ? 80 : 443),
+        path: u.pathname + (u.search || ""),
+        servername: u.hostname,
+        headers: {
+          "User-Agent": "ri-portal-app/1.0 (+https://onrender.com)",
+          "Accept": "application/json, */*;q=0.8",
+          ...headers,
+        },
+      },
+      (res) => {
+        // handle redirects (keep method/body for 307/308; downgrade to GET for 301/302/303)
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          res.resume();
+          const next = res.headers.location.startsWith("http")
+            ? res.headers.location
+            : new URL(res.headers.location, url).toString();
+          const keepMethod = res.statusCode === 307 || res.statusCode === 308;
+          return resolve(
+            httpRequestText(keepMethod ? method : "GET", next, { timeoutMs, headers, body: keepMethod ? body : null })
+          );
+        }
+
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          const raw = Buffer.concat(chunks);
+          const enc = (res.headers["content-encoding"] || "").toLowerCase();
+
+          const finish = (buf) => {
+            const text = buf.toString("utf-8");
+            if (res.statusCode >= 200 && res.statusCode < 300) return resolve(text);
+            const err = new Error(`HTTP ${res.statusCode}: ${text.slice(0, 300)}`);
+            err.statusCode = res.statusCode;
+            err.body = text;
+            return reject(err);
+          };
+
+          try {
+            if (enc === "gzip") {
+              const zlib = require("zlib");
+              return zlib.gunzip(raw, (err, out) => (err ? reject(err) : finish(out)));
+            }
+            if (enc === "deflate") {
+              const zlib = require("zlib");
+              return zlib.inflate(raw, (err, out) => (err ? reject(err) : finish(out)));
+            }
+          } catch {
+            // fall through
+          }
+          return finish(raw);
+        });
+      }
+    );
+
+    req.on("error", reject);
+    req.setTimeout(timeoutMs, () => req.destroy(new Error("Timeout")));
+
+    if (body != null) req.write(body);
+    req.end();
+  });
+}
+
+async function readUsers() {
+  if (REMOTE_USERS_ENABLED && REMOTE_USERS_URL && STORAGE_TOKEN) {
+    try {
+      const text = await httpRequestText("GET", REMOTE_USERS_URL, {
+        headers: { "X-Storage-Token": STORAGE_TOKEN },
+      });
+      const v = JSON.parse(text);
+      return parseUsersDoc(v);
+    } catch (err) {
+      console.error("[auth] Remote readUsers failed, falling back to local store:", err?.message || err);
+      return readUsersLocal();
+    }
+  }
+  return readUsersLocal();
+}
+
+async function writeUsers(users) {
+  const payload = serializeUsersDoc(users);
+
+  if (REMOTE_USERS_ENABLED && REMOTE_USERS_WRITE_URL && STORAGE_TOKEN) {
+    try {
+      await httpRequestText("POST", REMOTE_USERS_WRITE_URL, {
+        headers: {
+          "X-Storage-Token": STORAGE_TOKEN,
+          "Content-Type": "application/json; charset=utf-8",
+          "Content-Length": Buffer.byteLength(payload),
+        },
+        body: payload,
+      });
+      return true;
+    } catch (err) {
+      console.error("[auth] Remote writeUsers failed, falling back to local store:", err?.message || err);
+      // fall through to local write (best-effort)
+    }
+  }
+
+  // Best-effort local persistence. On some platforms (read-only FS) this will fail.
   try {
-    fs.writeFileSync(USERS_PATH, JSON.stringify(users, null, 2), "utf-8");
+    fs.writeFileSync(USERS_PATH, payload, "utf-8");
     return true;
   } catch {
     return false;
@@ -628,8 +767,8 @@ function authRequired(req, res, next) {
 }
 
 
-function currentUserFromStore(sub) {
-  const users = readUsers();
+async function currentUserFromStore(sub) {
+  const users = await readUsers();
   const u = users.find((x) => x.id === sub);
   if (u) return u;
   // Default admin fallback (when users.json not present)
@@ -637,12 +776,17 @@ function currentUserFromStore(sub) {
   return null;
 }
 
-function adminRequired(req, res, next) {
-  const u = currentUserFromStore(req.user?.sub);
-  if (!u) return res.status(401).json({ error: "Unauthorized" });
-  if ((u.role || "user") !== "admin") return res.status(403).json({ error: "Forbidden" });
-  req.currentUser = u;
-  return next();
+async function adminRequired(req, res, next) {
+  try {
+    const u = await currentUserFromStore(req.user?.sub);
+    if (!u) return res.status(401).json({ error: "Unauthorized" });
+    if ((u.role || "user") !== "admin") return res.status(403).json({ error: "Forbidden" });
+    req.currentUser = u;
+    return next();
+  } catch (err) {
+    console.error("[auth] adminRequired error:", err?.message || err);
+    return res.status(500).json({ error: "Server error" });
+  }
 }
 
 app.use("/data", express.static(path.resolve(__dirname, "server", "data")));
@@ -653,27 +797,27 @@ app.post("/api/auth/login", async (req, res) => {
   const password = normalizeStr(req.body?.password);
   if (!username || !password) return res.status(400).json({ error: "username/password required" });
 
-  const users = readUsers();
+  const users = await readUsers();
 
     // ✅ Default admin fallback (admin/admin1234). Also accepts legacy admin/1234.
   // Ensures admin is persisted with a valid bcrypt hash to avoid 500 errors.
   if (username === "admin" && (password === "admin1234" || password === "1234")) {
     const now = new Date().toISOString();
-    const users = readUsers();
+    const users = await readUsers();
     let existing = users.find((u) => u.username === "admin" || u.id === "admin");
     const adminHash = bcrypt.hashSync("admin1234", 10);
     if (existing) {
       existing.password_hash = isBcryptHash(existing.password_hash) ? existing.password_hash : adminHash;
       existing.last_login_at = now;
       existing.updated_at = now;
-      writeUsers(users);
+      await writeUsers(users);
       const token = signToken(existing);
       return res.json({ token, user: { id: existing.id, username: existing.username, name: existing.name, role: existing.role || "admin" } });
     }
 
     const user = { id: "admin", username: "admin", email: "admin@example.com", name: "관리자", org: "RI Portal", role: "admin", status: "approved", last_login_at: now, created_at: now, updated_at: now };
     users.push({ ...user, password_hash: adminHash });
-    writeUsers(users);
+    await writeUsers(users);
     const token = signToken(user);
     return res.json({ token, user: { id: user.id, username: user.username, name: user.name, role: user.role } });
   }
@@ -702,7 +846,7 @@ app.post("/api/auth/login", async (req, res) => {
   const now = new Date().toISOString();
   user.last_login_at = now;
   user.updated_at = now;
-  writeUsers(users);
+  await writeUsers(users);
 
   const token = signToken(user);
   return res.json({ token, user: { id: user.id, username: user.username, name: user.name, role: user.role || "user" } });
@@ -726,7 +870,7 @@ app.post("/api/auth/register", async (req, res) => {
   const username = emailOrUsername; // treat email as login id
   const email = emailOrUsername.includes("@") ? emailOrUsername : normalizeStr(req.body?.email);
 
-  const users = readUsers();
+  const users = await readUsers();
   if (users.some((u) => u.username === username || (email && u.email === email))) {
     return res.status(409).json({ error: "User exists" });
   }
@@ -747,7 +891,7 @@ app.post("/api/auth/register", async (req, res) => {
   };
   users.push(user);
 
-  const persisted = writeUsers(users);
+  const persisted = await writeUsers(users);
   return res.status(201).json({
     user: { id: user.id, username: user.username, email: user.email, name: user.name, org: user.org, role: user.role, status: user.status },
     persisted,
@@ -764,8 +908,8 @@ app.get("/__meta", (req, res) => {
   });
 });
 
-app.get("/api/auth/me", authRequired, (req, res) => {
-  const user = currentUserFromStore(req.user?.sub);
+app.get("/api/auth/me", authRequired, async (req, res) => {
+  const user = await currentUserFromStore(req.user?.sub);
   if (!user) return res.status(404).json({ error: "User not found" });
   return res.json({
     user: {
@@ -781,9 +925,9 @@ app.get("/api/auth/me", authRequired, (req, res) => {
 });
 
 
-app.get("/api/admin/users", authRequired, adminRequired, (req, res) => {
+app.get("/api/admin/users", authRequired, adminRequired, async (req, res) => {
   const status = normalizeStr(req.query.status); // optional
-  const users = readUsers()
+  const users = await readUsers()
     .filter((u) => (status ? (u.status || "approved") === status : true))
     .map((u) => ({
       id: u.id,
@@ -800,25 +944,25 @@ app.get("/api/admin/users", authRequired, adminRequired, (req, res) => {
   return res.json({ users });
 });
 
-app.post("/api/admin/users/:id/approve", authRequired, adminRequired, (req, res) => {
+app.post("/api/admin/users/:id/approve", authRequired, adminRequired, async (req, res) => {
   const id = req.params.id;
-  const users = readUsers();
+  const users = await readUsers();
   const u = users.find((x) => x.id === id);
   if (!u) return res.status(404).json({ error: "User not found" });
   u.status = "approved";
   u.updated_at = new Date().toISOString();
-  const persisted = writeUsers(users);
+  const persisted = await writeUsers(users);
   return res.json({ ok: true, persisted, user: { id: u.id, username: u.username, status: u.status } });
 });
 
-app.post("/api/admin/users/:id/reject", authRequired, adminRequired, (req, res) => {
+app.post("/api/admin/users/:id/reject", authRequired, adminRequired, async (req, res) => {
   const id = req.params.id;
-  const users = readUsers();
+  const users = await readUsers();
   const u = users.find((x) => x.id === id);
   if (!u) return res.status(404).json({ error: "User not found" });
   u.status = "rejected";
   u.updated_at = new Date().toISOString();
-  const persisted = writeUsers(users);
+  const persisted = await writeUsers(users);
   return res.json({ ok: true, persisted, user: { id: u.id, username: u.username, status: u.status } });
 });
 
@@ -827,7 +971,7 @@ app.post("/api/admin/users/:id/password", authRequired, adminRequired, async (re
   const newPassword = normalizeStr(req.body?.newPassword);
   if (!newPassword) return res.status(400).json({ error: "newPassword required" });
 
-  const users = readUsers();
+  const users = await readUsers();
   let u = users.find((x) => x.id === id);
 
   // allow setting password for default admin even if not in file yet
@@ -839,7 +983,7 @@ app.post("/api/admin/users/:id/password", authRequired, adminRequired, async (re
 
   u.password_hash = await bcrypt.hash(newPassword, 10);
   u.updated_at = new Date().toISOString();
-  const persisted = writeUsers(users);
+  const persisted = await writeUsers(users);
   return res.json({ ok: true, persisted });
 });
 
