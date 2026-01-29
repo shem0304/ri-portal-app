@@ -419,8 +419,8 @@ const pinnedLabelSet = React.useMemo(() => {
                   ctx.arc(x, y, r, 0, 2 * Math.PI, false);
                   ctx.fillStyle = '#FFFFFF';
                   ctx.fill();
-                  ctx.lineWidth = isSelected ? 3 : 1.6;
-                  ctx.strokeStyle = '#000000';
+                  ctx.lineWidth = isSelected ? 1.6 : 0.9;
+                  ctx.strokeStyle = '#9AA0A6';  // light gray outline
                   ctx.stroke();
 
                   // Labels: always show, but make selected larger/bolder
