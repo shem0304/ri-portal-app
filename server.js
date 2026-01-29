@@ -645,6 +645,8 @@ async function httpRequestText(method, url, { timeoutMs = 12000, headers = {}, b
         headers: {
           "User-Agent": "ri-portal-app/1.0 (+https://onrender.com)",
           "Accept": "application/json, */*;q=0.8",
+          "Accept-Encoding": "identity",
+          "Connection": "close",
           ...headers,
         },
       },
