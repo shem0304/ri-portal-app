@@ -25,25 +25,19 @@ export default function RelatedReports() {
   const [error, setError] = React.useState('');
   const [data, setData] = React.useState(null);
 
-  const keywordFromUrl = React.useMemo(() => {
-    const p = new URLSearchParams(location.search);
-
-  const instituteFromUrl = React.useMemo(() => {
+    const instituteFromUrl = React.useMemo(() => {
     const p = new URLSearchParams(location.search);
     return (p.get('institute') || '').trim();
   }, [location.search]);
 
   const effectiveInstitute = React.useMemo(() => {
-    const v = (instituteFromUrl || f.institute || '').trim();
-    return v;
+    return (instituteFromUrl || f.institute || '').trim();
   }, [instituteFromUrl, f.institute]);
+
+const keywordFromUrl = React.useMemo(() => {
+    const p = new URLSearchParams(location.search);
     return (p.get('keyword') || '').trim();
   }, [location.search]);
-
-  const effectiveInstitute = React.useMemo(() => {
-    const v = (instituteFromUrl || f.institute || '').trim();
-    return v;
-  }, [instituteFromUrl, f.institute]);
 
   React.useEffect(() => {
     let alive = true;
@@ -59,7 +53,7 @@ export default function RelatedReports() {
         const params = new URLSearchParams();
         if (f.q) params.set('q', f.q);
         if (f.scope) params.set('scope', f.scope);
-        // Constrain by institute from URL (preferred) or global filter
+        // Only constrain by institute when a specific institute is selected (not '기관 전체')
         if (effectiveInstitute && effectiveInstitute !== '기관 전체') params.set('institute', effectiveInstitute);
         if (f.year) params.set('year', f.year);
         params.set('limit', '100');
@@ -81,7 +75,7 @@ export default function RelatedReports() {
     })();
 
     return () => { alive = false; };
-  }, [user, keywordFromUrl, effectiveInstitute, f.scope, f.year, f.q]);
+  }, [user, keywordFromUrl, f.scope, effectiveInstitute, f.year, f.q]);
 
   return (
     <Box>
