@@ -15,7 +15,15 @@ export default function Network() {
   const { trendFilters } = useOutletContext();
   const f = trendFilters || { scope: 'all', institute: '', year: '', q: '' };
 
-  const [topKeywords, setTopKeywords] = React.useState(120);
+  
+  const relatedUrlForKeyword = React.useCallback((kw) => {
+    const params = new URLSearchParams();
+    params.set('keyword', String(kw || '').trim());
+    // carry institute filter from the 2nd combo (기관) so RelatedReports can constrain results
+    if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
+    return `/trends/related?${params.toString()}`;
+  }, [f.institute]);
+const [topKeywords, setTopKeywords] = React.useState(120);
   const [edgeTop, setEdgeTop] = React.useState(400);
   const [net, setNet] = React.useState({ nodes: [], edges: [] });
   const [hover, setHover] = React.useState(null);
@@ -423,12 +431,12 @@ export default function Network() {
                   const isLoggedIn = !!user;
                   if (!isLoggedIn) return;
                   if (navMode === 'click') {
-                    navigate(`/trends/related?keyword=${encodeURIComponent(id)}`);
+                    navigate(relatedUrlForKeyword(id));
                     return;
                   }
                   if (navMode === 'dblclick') {
                     const clicks = evt?.detail || 1;
-                    if (clicks >= 2) navigate(`/trends/related?keyword=${encodeURIComponent(id)}`);
+                    if (clicks >= 2) navigate(relatedUrlForKeyword(id));
                   }
                 }}
               />
@@ -439,7 +447,7 @@ export default function Network() {
                 Hover: {hover || '-'} · Click: {selected || '-'}
               </Typography>
               {selected && user ? (
-                <Button size='small' variant='outlined' onClick={() => navigate(`/trends/related?keyword=${encodeURIComponent(selected)}`)}>
+                <Button size='small' variant='outlined' onClick={() => navigate(relatedUrlForKeyword(selected))}>
                   관련 보고서 바로가기
                 </Button> ) : null}
             </Stack>
@@ -490,7 +498,7 @@ export default function Network() {
                         <Typography variant='caption' color='text.secondary'>{r.year} · {r.institute}</Typography>
                         <Divider sx={{ mt: 1 }} />
                       </Box> ))}
-                    <Button size='small' onClick={() => navigate(`/trends/related?keyword=${encodeURIComponent(selected)}`)} sx={{ mt: 1 }}>전체 보기</Button>
+                    <Button size='small' onClick={() => navigate(relatedUrlForKeyword(selected))} sx={{ mt: 1 }}>전체 보기</Button>
                   </Box> ) : (
                   <Typography variant='body2' color='text.secondary'>해당 키워드로 매칭되는 보고서가 없습니다.</Typography> )}
               </Box> )}

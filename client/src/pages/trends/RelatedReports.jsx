@@ -27,8 +27,23 @@ export default function RelatedReports() {
 
   const keywordFromUrl = React.useMemo(() => {
     const p = new URLSearchParams(location.search);
+
+  const instituteFromUrl = React.useMemo(() => {
+    const p = new URLSearchParams(location.search);
+    return (p.get('institute') || '').trim();
+  }, [location.search]);
+
+  const effectiveInstitute = React.useMemo(() => {
+    const v = (instituteFromUrl || f.institute || '').trim();
+    return v;
+  }, [instituteFromUrl, f.institute]);
     return (p.get('keyword') || '').trim();
   }, [location.search]);
+
+  const effectiveInstitute = React.useMemo(() => {
+    const v = (instituteFromUrl || f.institute || '').trim();
+    return v;
+  }, [instituteFromUrl, f.institute]);
 
   React.useEffect(() => {
     let alive = true;
@@ -44,8 +59,8 @@ export default function RelatedReports() {
         const params = new URLSearchParams();
         if (f.q) params.set('q', f.q);
         if (f.scope) params.set('scope', f.scope);
-        // Only constrain by institute when a specific institute is selected (not '기관 전체')
-        if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
+        // Constrain by institute from URL (preferred) or global filter
+        if (effectiveInstitute && effectiveInstitute !== '기관 전체') params.set('institute', effectiveInstitute);
         if (f.year) params.set('year', f.year);
         params.set('limit', '100');
         params.set('offset', '0');
@@ -66,7 +81,7 @@ export default function RelatedReports() {
     })();
 
     return () => { alive = false; };
-  }, [user, keywordFromUrl, f.scope, f.institute, f.year, f.q]);
+  }, [user, keywordFromUrl, effectiveInstitute, f.scope, f.year, f.q]);
 
   return (
     <Box>
@@ -76,7 +91,7 @@ export default function RelatedReports() {
         </Typography>
         <Typography variant='caption' color='text.secondary'>
           상단의 공통 조회 조건(연구기관 구분/기관/연도/검색어)으로 보고서를 조회합니다.
-          {keywordFromUrl ? ` (선택 키워드: ${keywordFromUrl})` : ''}
+          {keywordFromUrl ? ` (선택 키워드: ${keywordFromUrl})` : ''}{effectiveInstitute && effectiveInstitute !== '기관 전체' ? ` (기관: ${effectiveInstitute})` : ''}
         </Typography>
 
         {!user ? (
