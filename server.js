@@ -936,7 +936,10 @@ app.get("/api/auth/me", authRequired, async (req, res) => {
 
 app.get("/api/admin/users", authRequired, adminRequired, async (req, res) => {
   const status = normalizeStr(req.query.status); // optional
-  const users = await readUsers()
+  // NOTE: Avoid `await readUsers().filter(...)` precedence pitfall.
+  // `await readUsers().filter(...)` tries to access `.filter` on a Promise.
+  const allUsers = await readUsers();
+  const users = allUsers
     .filter((u) => (status ? (u.status || "approved") === status : true))
     .map((u) => ({
       id: u.id,
