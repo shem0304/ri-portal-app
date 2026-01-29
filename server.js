@@ -18,7 +18,14 @@ const __dirname = path.dirname(__filename);
 // Load environment variables from an env file for portability.
 // - Default: "<project>/.env" (same folder as server.js)
 // - Override: ENV_FILE=/absolute/path/to/.env
-dotenv.config({ path: process.env.ENV_FILE || path.join(__dirname, ".env") });
+const ENV_FILE_PATH = process.env.ENV_FILE || path.join(__dirname, ".env");
+const envResult = dotenv.config({ path: ENV_FILE_PATH });
+if (envResult?.error) {
+  console.warn(`[env] No .env loaded from ${ENV_FILE_PATH} (${envResult.error.message}); using process.env only`);
+} else {
+  console.log(`[env] Loaded environment from ${ENV_FILE_PATH}`);
+}
+
 
 const app = express();
 
@@ -544,6 +551,9 @@ const REMOTE_STOPWORDS_ENABLED =
 
 const STOPWORDS_REMOTE_URL = process.env.STOPWORDS_REMOTE_URL || "";
 const STOPWORDS_REMOTE_WRITE_URL = process.env.STOPWORDS_REMOTE_WRITE_URL || STOPWORDS_REMOTE_URL;
+let lastRemoteStopwordsFailureAt = 0;
+const REMOTE_STOPWORDS_BACKOFF_MS = Number(process.env.REMOTE_STOPWORDS_BACKOFF_MS || 0);
+const REMOTE_STOPWORDS_BACKOFF_TIMEOUT_MS = Number(process.env.REMOTE_STOPWORDS_BACKOFF_TIMEOUT_MS || 800);
 
 function normalizeStopwordsPayload(v) {
   // Accept either array or { words: [...] }
@@ -556,19 +566,27 @@ function normalizeStopwordsPayload(v) {
 async function readStopwords() {
   // Remote first (when enabled)
   if (REMOTE_STOPWORDS_ENABLED && STOPWORDS_REMOTE_URL) {
+    const token = process.env.STORAGE_TOKEN || "";
+    const baseTimeout = Number(process.env.REMOTE_STOPWORDS_TIMEOUT_MS || 3000);
+    const inBackoff =
+      REMOTE_STOPWORDS_BACKOFF_MS > 0 && Date.now() - lastRemoteStopwordsFailureAt < REMOTE_STOPWORDS_BACKOFF_MS;
+    const timeoutMs = inBackoff ? Math.min(baseTimeout, REMOTE_STOPWORDS_BACKOFF_TIMEOUT_MS) : baseTimeout;
+
     try {
-      const token = process.env.STORAGE_TOKEN || "";
       const raw = await httpRequestText("GET", STOPWORDS_REMOTE_URL, {
-        timeoutMs: Number(process.env.REMOTE_STOPWORDS_TIMEOUT_MS || 3000),
+        timeoutMs,
         headers: token ? { "X-Storage-Token": token } : {},
       });
       const parsed = JSON.parse(raw || "[]");
+      lastRemoteStopwordsFailureAt = 0;
       return normalizeStopwordsPayload(parsed);
     } catch (err) {
+      lastRemoteStopwordsFailureAt = Date.now();
       console.warn("[stopwords] Remote readStopwords failed, falling back to local store:", err?.message || err);
       // fall through to local
     }
   }
+
 
   // Local fallback
   if (!fs.existsSync(STOPWORDS_PATH)) return [];
@@ -666,7 +684,8 @@ const REMOTE_USERS_WRITE_URL =
 
 const STORAGE_TOKEN = process.env.STORAGE_TOKEN || "";
 let lastRemoteUsersFailureAt = 0;
-const REMOTE_USERS_BACKOFF_MS = Number(process.env.REMOTE_USERS_BACKOFF_MS || 30000);
+const REMOTE_USERS_BACKOFF_MS = Number(process.env.REMOTE_USERS_BACKOFF_MS || 0);
+const REMOTE_USERS_BACKOFF_TIMEOUT_MS = Number(process.env.REMOTE_USERS_BACKOFF_TIMEOUT_MS || 800);
 
 function parseUsersDoc(v) {
   if (Array.isArray(v)) return v;
@@ -766,15 +785,17 @@ async function httpRequestText(method, url, { timeoutMs = 12000, headers = {}, b
 
 async function readUsers() {
   if (REMOTE_USERS_ENABLED && REMOTE_USERS_URL && STORAGE_TOKEN) {
-    if (Date.now() - lastRemoteUsersFailureAt < REMOTE_USERS_BACKOFF_MS) {
-      return readUsersLocal();
-    }
+    const baseTimeout = Number(process.env.REMOTE_USERS_TIMEOUT_MS || 3000);
+    const inBackoff = REMOTE_USERS_BACKOFF_MS > 0 && Date.now() - lastRemoteUsersFailureAt < REMOTE_USERS_BACKOFF_MS;
+    const timeoutMs = inBackoff ? Math.min(baseTimeout, REMOTE_USERS_BACKOFF_TIMEOUT_MS) : baseTimeout;
+
     try {
       const text = await httpRequestText("GET", REMOTE_USERS_URL, {
-        timeoutMs: Number(process.env.REMOTE_USERS_TIMEOUT_MS || 3000),
+        timeoutMs,
         headers: { "X-Storage-Token": STORAGE_TOKEN },
       });
       const v = JSON.parse(text);
+      lastRemoteUsersFailureAt = 0;
       return parseUsersDoc(v);
     } catch (err) {
       lastRemoteUsersFailureAt = Date.now();
@@ -1095,8 +1116,9 @@ app.get("/api/stopwords/stream", (req, res) => {
   });
 });
 
-app.get("/api/admin/stopwords", authRequired, adminRequired, (req, res) => {
-  const words = [...STOP_EXTRA].sort();
+app.get("/api/admin/stopwords", authRequired, adminRequired, async (req, res) => {
+  const words = (await readStopwords()).sort();
+  STOP_EXTRA = new Set(words);
   return res.json({ words });
 });
 
@@ -1754,6 +1776,9 @@ app.get("*", (req, res) => {
 });
 
 async function bootstrap() {
+  console.log(`[storage] users remote: ${REMOTE_USERS_ENABLED ? "on" : "off"} url=${REMOTE_USERS_URL || "-"} write=${REMOTE_USERS_WRITE_URL || "-"}`);
+  console.log(`[storage] stopwords remote: ${REMOTE_STOPWORDS_ENABLED ? "on" : "off"} url=${STOPWORDS_REMOTE_URL || "-"} write=${STOPWORDS_REMOTE_WRITE_URL || "-"}`);
+
   try {
     await reloadStopwords();
   } catch (err) {
