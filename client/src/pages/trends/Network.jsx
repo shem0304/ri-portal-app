@@ -1,6 +1,6 @@
 import React from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { Box, Button, Divider, Grid, Paper, Slider, Stack, Typography, FormControl, MenuItem, Select, TextField, Autocomplete } from '@mui/material';
+import { Box, Button, Divider, Grid, Paper, Slider, Stack, Typography, FormControl, MenuItem, Select } from '@mui/material';
 import { useTheme } from '@mui/material/styles';
 import ForceGraph2D from 'react-force-graph-2d';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from 'recharts';
@@ -20,38 +20,6 @@ export default function Network() {
   const [net, setNet] = React.useState({ nodes: [], edges: [] });
   const [hover, setHover] = React.useState(null);
   const [selected, setSelected] = React.useState('');
-  const [keywordInput, setKeywordInput] = React.useState('');
-  const [keywordError, setKeywordError] = React.useState('');
-
-  const keywordOptions = React.useMemo(() => {
-    const nodes = Array.isArray(net?.nodes) ? net.nodes : [];
-    return nodes.map((n) => String(n.id || '')).filter(Boolean).sort((a, b) => a.localeCompare(b, 'ko'));
-  }, [net]);
-
-  const findNodeById = React.useCallback((id) => {
-    const nodes = Array.isArray(net?.nodes) ? net.nodes : [];
-    return nodes.find((n) => String(n.id) === String(id));
-  }, [net]);
-
-  const runKeywordSearch = React.useCallback((raw) => {
-    const kw = String(raw || '').trim();
-    if (!kw) return;
-    const node = findNodeById(kw);
-    if (!node) {
-      setKeywordError('현재 그래프에 해당 키워드가 없습니다. (상단의 노드 수를 늘려보세요)');
-      return;
-    }
-    setKeywordError('');
-    setSelected(kw);
-    requestAnimationFrame(() => {
-      try {
-        const fg = fgRef.current;
-        if (!fg) return;
-        fg.centerAt(node.x || 0, node.y || 0, 600);
-        fg.zoom(2.2, 600);
-      } catch {}
-    });
-  }, [findNodeById]);
 
   // Focus set: selected node + its 1-hop neighbors
   const selectedSet = React.useMemo(() => {
@@ -145,7 +113,7 @@ export default function Network() {
         params.set('topKeywords', String(topKeywords));
         params.set('edgeTop', String(edgeTop));
         params.set('scope', f.scope || 'all');
-        if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
+        if (f.institute) params.set('institute', f.institute);
         if (f.year) params.set('year', f.year);
         if (f.q) params.set('q', f.q);
         const res = await apiFetch(`/api/trends/network?${params.toString()}`);
@@ -199,7 +167,7 @@ export default function Network() {
         const params = new URLSearchParams();
         params.set('keyword', selected);
         params.set('scope', f.scope || 'all');
-        if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
+        if (f.institute) params.set('institute', f.institute);
         if (f.year) params.set('year', f.year);
         if (f.q) params.set('q', f.q);
         const s = await apiFetch(`/api/trends/keyword?${params.toString()}`);
@@ -214,7 +182,7 @@ export default function Network() {
           params.set('keyword', selected);
           params.set('limit', '50');
           params.set('scope', f.scope || 'all');
-          if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
+          if (f.institute) params.set('institute', f.institute);
           if (f.year) params.set('year', f.year);
           if (f.q) params.set('q', f.q);
           const rr = await apiFetch(`/api/trends/related?${params.toString()}`, { auth: true });
@@ -240,37 +208,28 @@ export default function Network() {
     const s = Number(node.size || 1);
     const gs = Number(globalScale || 1);
 
-    // Node radius (keep in sync with nodeCanvasObject)
-    const r = 4 + Math.sqrt(s) * 2.2;
-    // Render label even for small nodes (font will shrink)
-
-    // Center label in the node
+    // Always show labels (requested). Use small font when zoomed out.
+    const label = id.length > 18 ? `${id.slice(0, 17)}…` : id;
+    const boost = node._boost ? 1.25 : 1;
+    const fontSize = Math.max(9, (12 / gs) * boost);
+    ctx.font = `${fontSize}px sans-serif`;
     const x = node.x || 0;
     const y = node.y || 0;
+    const r = 4 + Math.sqrt(s) * 2.2;
 
-    const boost = node._boost ? 1.25 : 1;
-
-    // Start with a font size that generally fits inside the circle
-    let fontSize = Math.max(8, Math.min(16, (r * 1.15) / gs) * boost);
-    let label = id;
+    // Place label above the node
+    const lx = x;
+    const ly = y - r - (fontSize * 0.2) - 6;
 
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    // Fit text into the node (truncate + ellipsis if needed)
-    const maxWidth = Math.max(10, (r - 2) * 2);
-    while (fontSize > 7) {
-      ctx.font = `600 ${fontSize}px sans-serif`;
-      const w = ctx.measureText(label).width;
-      if (w <= maxWidth) break;
-      // truncate if still too wide
-      if (label.length > 4) label = `${label.slice(0, Math.max(2, label.length - 2))}…`;
-      else fontSize -= 1;
-    }
-
-    // Text (black) centered in node
-    ctx.fillStyle = '#000000';
-    ctx.fillText(label, x, y);
+    ctx.textBaseline = 'bottom';
+    // outline to keep readable
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = theme.palette.background.default;
+    ctx.strokeText(label, lx, ly);
+    ctx.lineWidth = 1;
+    ctx.fillStyle = theme.palette.text.primary;
+    ctx.fillText(label, lx, ly);
   };
 
   const graphData = React.useMemo(() => ({
@@ -315,43 +274,6 @@ export default function Network() {
               <Typography variant='caption' color='text.secondary'>줌을 확대하면 라벨이 더 많이 표시됩니다. (색상: 기본 노드=회색, 선택 노드=빨강 + Halo)</Typography>
             </Stack>
 
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ mt: 1 }}>
-              <Autocomplete
-                freeSolo
-                options={keywordOptions}
-                inputValue={keywordInput}
-                onInputChange={(_, v) => {
-                  setKeywordInput(v);
-                  if (keywordError) setKeywordError('');
-                }}
-                onChange={(_, v) => {
-                  const kw = String(v || '').trim();
-                  setKeywordInput(kw);
-                  if (kw) runKeywordSearch(kw);
-                }}
-                renderInput={(params) => (
-                  <TextField
-                    {...params}
-                    label='키워드 입력'
-                    placeholder='예: 발전방향'
-                    size='small'
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') runKeywordSearch(keywordInput);
-                    }}
-                  />
-                )}
-                sx={{ minWidth: { xs: '100%', sm: 320 } }}
-              />
-              <Button size='small' variant='contained' onClick={() => runKeywordSearch(keywordInput)}>
-                보기
-              </Button>
-              {keywordError ? (
-                <Typography variant='caption' color='error.main' sx={{ display: 'block' }}>
-                  {keywordError}
-                </Typography>
-              ) : null}
-            </Stack>
-
             <Box sx={{ height: 520, mt: 1, borderRadius: 2, overflow: 'hidden', bgcolor: 'background.default' }}>
               <ForceGraph2D
                 ref={fgRef}
@@ -386,17 +308,17 @@ export default function Network() {
                   // Node circle
                   ctx.beginPath();
                   ctx.arc(x, y, r, 0, 2 * Math.PI, false);
-                  ctx.fillStyle = '#FFFFFF';
+                  ctx.fillStyle = isSelected ? '#E53935' : '#9E9E9E';
                   ctx.fill();
-                  ctx.lineWidth = isSelected ? 2.5 : 1.5;
-                  ctx.strokeStyle = '#000000';
+                  ctx.lineWidth = isSelected ? 3 : 1;
+                  ctx.strokeStyle = theme.palette.divider;
                   ctx.stroke();
 
                   // Labels: always show, but make selected larger/bolder
                   paintNodeLabel({ ...node, _boost: isSelected ? 1 : 0 }, ctx, globalScale);
                   ctx.restore();
                 }}
-                nodeColor={() => '#FFFFFF'}
+                nodeColor={(n) => (n.id === selected ? '#E53935' : '#9E9E9E')}
                 linkColor={(l) => `rgba(0,0,0,${linkAlpha(l)})`}
                 nodeRelSize={4}
                 nodeVal={(n) => n.size || 1}
