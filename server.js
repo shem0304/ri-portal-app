@@ -604,6 +604,8 @@ const REMOTE_USERS_WRITE_URL =
     : REMOTE_USERS_URL;
 
 const STORAGE_TOKEN = process.env.STORAGE_TOKEN || "";
+let lastRemoteUsersFailureAt = 0;
+const REMOTE_USERS_BACKOFF_MS = Number(process.env.REMOTE_USERS_BACKOFF_MS || 30000);
 
 function parseUsersDoc(v) {
   if (Array.isArray(v)) return v;
@@ -701,13 +703,18 @@ async function httpRequestText(method, url, { timeoutMs = 12000, headers = {}, b
 
 async function readUsers() {
   if (REMOTE_USERS_ENABLED && REMOTE_USERS_URL && STORAGE_TOKEN) {
+    if (Date.now() - lastRemoteUsersFailureAt < REMOTE_USERS_BACKOFF_MS) {
+      return readUsersLocal();
+    }
     try {
       const text = await httpRequestText("GET", REMOTE_USERS_URL, {
+        timeoutMs: Number(process.env.REMOTE_USERS_TIMEOUT_MS || 3000),
         headers: { "X-Storage-Token": STORAGE_TOKEN },
       });
       const v = JSON.parse(text);
       return parseUsersDoc(v);
     } catch (err) {
+      lastRemoteUsersFailureAt = Date.now();
       console.error("[auth] Remote readUsers failed, falling back to local store:", err?.message || err);
       return readUsersLocal();
     }
@@ -721,6 +728,7 @@ async function writeUsers(users) {
   if (REMOTE_USERS_ENABLED && REMOTE_USERS_WRITE_URL && STORAGE_TOKEN) {
     try {
       await httpRequestText("POST", REMOTE_USERS_WRITE_URL, {
+        timeoutMs: Number(process.env.REMOTE_USERS_WRITE_TIMEOUT_MS || 5000),
         headers: {
           "X-Storage-Token": STORAGE_TOKEN,
           "Content-Type": "application/json; charset=utf-8",
@@ -730,6 +738,7 @@ async function writeUsers(users) {
       });
       return true;
     } catch (err) {
+      lastRemoteUsersFailureAt = Date.now();
       console.error("[auth] Remote writeUsers failed, falling back to local store:", err?.message || err);
       // fall through to local write (best-effort)
     }
