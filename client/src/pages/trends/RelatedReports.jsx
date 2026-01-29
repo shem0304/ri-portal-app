@@ -25,19 +25,39 @@ export default function RelatedReports() {
   const [error, setError] = React.useState('');
   const [data, setData] = React.useState(null);
 
-    const instituteFromUrl = React.useMemo(() => {
-    const p = new URLSearchParams(location.search);
-    return (p.get('institute') || '').trim();
-  }, [location.search]);
-
-  const effectiveInstitute = React.useMemo(() => {
-    return (instituteFromUrl || f.institute || '').trim();
-  }, [instituteFromUrl, f.institute]);
+  const urlParams = React.useMemo(() => new URLSearchParams(location.search), [location.search]);
 
 const keywordFromUrl = React.useMemo(() => {
-    const p = new URLSearchParams(location.search);
-    return (p.get('keyword') || '').trim();
-  }, [location.search]);
+  return (urlParams.get('keyword') || '').trim();
+}, [urlParams]);
+
+// Carry over Network combo selections via URL (1st/2nd/3rd combos: scope/institute/year)
+const scopeFromUrl = React.useMemo(() => (urlParams.get('scope') || '').trim(), [urlParams]);
+const instituteFromUrl = React.useMemo(() => (urlParams.get('institute') || '').trim(), [urlParams]);
+const yearFromUrl = React.useMemo(() => (urlParams.get('year') || '').trim(), [urlParams]);
+const qFromUrl = React.useMemo(() => (urlParams.get('q') || '').trim(), [urlParams]);
+
+const effectiveScope = React.useMemo(() => {
+  // If scope is present in URL (even empty), prefer it; otherwise fallback to global filters.
+  if (urlParams.has('scope')) return scopeFromUrl || 'all';
+  return f.scope || 'all';
+}, [urlParams, scopeFromUrl, f.scope]);
+
+const effectiveInstitute = React.useMemo(() => {
+  if (urlParams.has('institute')) return instituteFromUrl;
+  return f.institute || '';
+}, [urlParams, instituteFromUrl, f.institute]);
+
+const effectiveYear = React.useMemo(() => {
+  if (urlParams.has('year')) return yearFromUrl;
+  return f.year || '';
+}, [urlParams, yearFromUrl, f.year]);
+
+const effectiveQ = React.useMemo(() => {
+  if (urlParams.has('q')) return qFromUrl;
+  return f.q || '';
+}, [urlParams, qFromUrl, f.q]);
+
 
   React.useEffect(() => {
     let alive = true;
@@ -51,11 +71,12 @@ const keywordFromUrl = React.useMemo(() => {
       setError('');
       try {
         const params = new URLSearchParams();
-        if (f.q) params.set('q', f.q);
-        if (f.scope) params.set('scope', f.scope);
+        if (effectiveQ) params.set('q', effectiveQ);
+        params.set('scope', effectiveScope || 'all');
         // Only constrain by institute when a specific institute is selected (not '기관 전체')
         if (effectiveInstitute && effectiveInstitute !== '기관 전체') params.set('institute', effectiveInstitute);
-        if (f.year) params.set('year', f.year);
+        if (effectiveYear) params.set('year', effectiveYear);
+
         params.set('limit', '100');
         params.set('offset', '0');
 
@@ -75,7 +96,7 @@ const keywordFromUrl = React.useMemo(() => {
     })();
 
     return () => { alive = false; };
-  }, [user, keywordFromUrl, f.scope, effectiveInstitute, f.year, f.q]);
+  }, [user, keywordFromUrl, effectiveScope, effectiveInstitute, effectiveYear, effectiveQ]);
 
   return (
     <Box>
@@ -84,8 +105,8 @@ const keywordFromUrl = React.useMemo(() => {
           보고서 목록 (로그인 필요)
         </Typography>
         <Typography variant='caption' color='text.secondary'>
-          상단의 공통 조회 조건(연구기관 구분/기관/연도/검색어)으로 보고서를 조회합니다.
-          {keywordFromUrl ? ` (선택 키워드: ${keywordFromUrl})` : ''}{effectiveInstitute && effectiveInstitute !== '기관 전체' ? ` (기관: ${effectiveInstitute})` : ''}
+          네트워크 화면에서 넘어온 조회 조건(연구기관 구분/기관/연도/검색어)을 적용해 보고서를 조회합니다.
+          {` (구분: ${effectiveScope || 'all'}${effectiveInstitute ? `, 기관: ${effectiveInstitute}` : ''}${effectiveYear ? `, 연도: ${effectiveYear}` : ''}${effectiveQ ? `, 검색어: ${effectiveQ}` : ''})`}{keywordFromUrl ? ` (선택 키워드: ${keywordFromUrl})` : ''}
         </Typography>
 
         {!user ? (

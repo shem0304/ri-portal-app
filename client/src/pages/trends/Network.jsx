@@ -15,14 +15,6 @@ export default function Network() {
   const { trendFilters } = useOutletContext();
   const f = trendFilters || { scope: 'all', institute: '', year: '', q: '' };
 
-  const buildRelatedUrl = React.useCallback((keyword) => {
-    const p = new URLSearchParams();
-    p.set('keyword', String(keyword || '').trim());
-    if (f.institute && f.institute !== '기관 전체') p.set('institute', f.institute);
-    return `/trends/related?${p.toString()}`;
-  }, [f.institute]);
-
-
   const [topKeywords, setTopKeywords] = React.useState(120);
   const [edgeTop, setEdgeTop] = React.useState(400);
   const [net, setNet] = React.useState({ nodes: [], edges: [] });
@@ -153,10 +145,10 @@ export default function Network() {
         params.set('topKeywords', String(topKeywords));
         params.set('edgeTop', String(edgeTop));
         params.set('scope', f.scope || 'all');
-        if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
-        if (f.year) params.set('year', f.year);
+        params.set('institute', f.institute || '');
+        params.set('year', f.year || '');
         if (f.q) params.set('q', f.q);
-        const res = await apiFetch(`/api/trends/network?${params.toString()}`);
+const res = await apiFetch(`/api/trends/network?${params.toString()}`);
         if (alive) setNet(res);
       } catch {
         if (alive) setNet({ nodes: [], edges: [] });
@@ -207,10 +199,10 @@ export default function Network() {
         const params = new URLSearchParams();
         params.set('keyword', selected);
         params.set('scope', f.scope || 'all');
-        if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
-        if (f.year) params.set('year', f.year);
+        params.set('institute', f.institute || '');
+        params.set('year', f.year || '');
         if (f.q) params.set('q', f.q);
-        const s = await apiFetch(`/api/trends/keyword?${params.toString()}`);
+const s = await apiFetch(`/api/trends/keyword?${params.toString()}`);
         if (alive) setSeries(s);
       } catch {
         if (alive) setSeries(null);
@@ -222,10 +214,10 @@ export default function Network() {
           params.set('keyword', selected);
           params.set('limit', '50');
           params.set('scope', f.scope || 'all');
-          if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
-          if (f.year) params.set('year', f.year);
-          if (f.q) params.set('q', f.q);
-          const rr = await apiFetch(`/api/trends/related?${params.toString()}`, { auth: true });
+        params.set('institute', f.institute || '');
+        params.set('year', f.year || '');
+        if (f.q) params.set('q', f.q);
+const rr = await apiFetch(`/api/trends/related?${params.toString()}`, { auth: true });
           if (alive) setRelated(rr);
         } catch {
           if (alive) setRelated(null);
@@ -431,12 +423,12 @@ export default function Network() {
                   const isLoggedIn = !!user;
                   if (!isLoggedIn) return;
                   if (navMode === 'click') {
-                    navigate(buildRelatedUrl(id));
+                    navigate(`/trends/related?keyword=${encodeURIComponent(id)}`);
                     return;
                   }
                   if (navMode === 'dblclick') {
                     const clicks = evt?.detail || 1;
-                    if (clicks >= 2) navigate(buildRelatedUrl(id));
+                    if (clicks >= 2) navigate(`/trends/related?keyword=${encodeURIComponent(id)}`);
                   }
                 }}
               />
@@ -447,7 +439,7 @@ export default function Network() {
                 Hover: {hover || '-'} · Click: {selected || '-'}
               </Typography>
               {selected && user ? (
-                <Button size='small' variant='outlined' onClick={() => navigate(buildRelatedUrl(selected))}>
+                <Button size='small' variant='outlined' onClick={() => navigate(`/trends/related?keyword=${encodeURIComponent(selected)}`)}>
                   관련 보고서 바로가기
                 </Button> ) : null}
             </Stack>
@@ -498,7 +490,7 @@ export default function Network() {
                         <Typography variant='caption' color='text.secondary'>{r.year} · {r.institute}</Typography>
                         <Divider sx={{ mt: 1 }} />
                       </Box> ))}
-                    <Button size='small' onClick={() => navigate(buildRelatedUrl(selected))} sx={{ mt: 1 }}>전체 보기</Button>
+                    <Button size='small' onClick={() => navigate(`/trends/related?keyword=${encodeURIComponent(selected)}`)} sx={{ mt: 1 }}>전체 보기</Button>
                   </Box> ) : (
                   <Typography variant='body2' color='text.secondary'>해당 키워드로 매칭되는 보고서가 없습니다.</Typography> )}
               </Box> )}
