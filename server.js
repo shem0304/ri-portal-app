@@ -11,11 +11,14 @@ import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 
-dotenv.config();
-
 // Resolve paths reliably on Render (working directory can vary)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Load environment variables from an env file for portability.
+// - Default: "<project>/.env" (same folder as server.js)
+// - Override: ENV_FILE=/absolute/path/to/.env
+dotenv.config({ path: process.env.ENV_FILE || path.join(__dirname, ".env") });
 
 const app = express();
 
@@ -526,23 +529,88 @@ function keywordCounts(reports) {
 // Auth
 // -----------------------------
 const STOPWORDS_PATH = path.join(DATA_DIR, "stopwords.json");
-function readStopwords() {
-  if (!fs.existsSync(STOPWORDS_PATH)) return [];
-  const v = readJson(STOPWORDS_PATH);
-  const arr = Array.isArray(v) ? v : [];
-  // normalize to lowercase strings
+
+// -----------------------------
+// Remote stopwords store (optional)
+// -----------------------------
+// If DEBUG_REMOTE_STOPWORDS=1 (or STOPWORDS_REMOTE_URL is set), stopwords are loaded/saved via a remote endpoint.
+// Recommended: use a PHP proxy (stopword.php) that reads/writes stopwords.json on your storage host.
+// The remote endpoint must support:
+//   - GET  -> returns stopwords.json (either ["a","b"] or { words:["a","b"] })
+//   - POST -> accepts a JSON body and persists it (recommended: write the raw body to stopwords.json)
+// Auth: request header "X-Storage-Token" must match STORAGE_TOKEN on the Render server.
+const REMOTE_STOPWORDS_ENABLED =
+  process.env.DEBUG_REMOTE_STOPWORDS === "1" || Boolean(process.env.STOPWORDS_REMOTE_URL);
+
+const STOPWORDS_REMOTE_URL = process.env.STOPWORDS_REMOTE_URL || "";
+const STOPWORDS_REMOTE_WRITE_URL = process.env.STOPWORDS_REMOTE_WRITE_URL || STOPWORDS_REMOTE_URL;
+
+function normalizeStopwordsPayload(v) {
+  // Accept either array or { words: [...] }
+  const arr = Array.isArray(v) ? v : Array.isArray(v?.words) ? v.words : [];
   return arr
     .map((x) => normalizeStr(x).toLowerCase())
     .filter(Boolean);
 }
 
-function writeStopwords(words) {
+async function readStopwords() {
+  // Remote first (when enabled)
+  if (REMOTE_STOPWORDS_ENABLED && STOPWORDS_REMOTE_URL) {
+    try {
+      const token = process.env.STORAGE_TOKEN || "";
+      const raw = await httpRequestText("GET", STOPWORDS_REMOTE_URL, {
+        timeoutMs: Number(process.env.REMOTE_STOPWORDS_TIMEOUT_MS || 3000),
+        headers: token ? { "X-Storage-Token": token } : {},
+      });
+      const parsed = JSON.parse(raw || "[]");
+      return normalizeStopwordsPayload(parsed);
+    } catch (err) {
+      console.warn("[stopwords] Remote readStopwords failed, falling back to local store:", err?.message || err);
+      // fall through to local
+    }
+  }
+
+  // Local fallback
+  if (!fs.existsSync(STOPWORDS_PATH)) return [];
+  const v = readJson(STOPWORDS_PATH);
+  return normalizeStopwordsPayload(v);
+}
+
+async function writeStopwords(words) {
+  // Always write normalized array
+  const payload = JSON.stringify(words, null, 2);
+
+  if (REMOTE_STOPWORDS_ENABLED && (STOPWORDS_REMOTE_WRITE_URL || STOPWORDS_REMOTE_URL)) {
+    try {
+      const token = process.env.STORAGE_TOKEN || "";
+      // If someone mistakenly set STOPWORDS_REMOTE_WRITE_URL to a .json file, write via the proxy (.php) if available.
+      const writeUrl =
+        STOPWORDS_REMOTE_WRITE_URL && STOPWORDS_REMOTE_WRITE_URL.endsWith(".php")
+          ? STOPWORDS_REMOTE_WRITE_URL
+          : STOPWORDS_REMOTE_URL || STOPWORDS_REMOTE_WRITE_URL;
+
+      if (!writeUrl) throw new Error("STOPWORDS_REMOTE_WRITE_URL is not set");
+
+      await httpRequestText("POST", writeUrl, {
+        timeoutMs: Number(process.env.REMOTE_STOPWORDS_WRITE_TIMEOUT_MS || 5000),
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          ...(token ? { "X-Storage-Token": token } : {}),
+        },
+        body: payload,
+      });
+      return true;
+    } catch (err) {
+      console.warn("[stopwords] Remote writeStopwords failed, falling back to local store:", err?.message || err);
+      // fall through to local
+    }
+  }
+
+  // Local fallback (best-effort)
   try {
-    // Ensure persistence directory exists (and is writable)
     fs.mkdirSync(path.dirname(STOPWORDS_PATH), { recursive: true });
-    // Atomic write to avoid partial files
     const tmp = `${STOPWORDS_PATH}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(words, null, 2), "utf-8");
+    fs.writeFileSync(tmp, payload, "utf-8");
     fs.renameSync(tmp, STOPWORDS_PATH);
     return true;
   } catch {
@@ -550,16 +618,8 @@ function writeStopwords(words) {
   }
 }
 
-
 // Stopwords change notification (for clients already connected)
-let STOPWORDS_VERSION = (() => {
-  try {
-    if (fs.existsSync(STOPWORDS_PATH)) return String(fs.statSync(STOPWORDS_PATH).mtimeMs);
-  } catch {
-    // ignore
-  }
-  return String(Date.now());
-})();
+let STOPWORDS_VERSION = String(Date.now());
 
 const stopwordsStreams = new Set();
 function broadcastStopwordsVersion() {
@@ -573,10 +633,11 @@ function broadcastStopwordsVersion() {
   }
 }
 
-// dynamic stopwords loaded from file
-let STOP_EXTRA = new Set(readStopwords());
-function reloadStopwords() {
-  STOP_EXTRA = new Set(readStopwords());
+// dynamic stopwords loaded from store (remote/local)
+let STOP_EXTRA = new Set();
+
+async function reloadStopwords() {
+  STOP_EXTRA = new Set(await readStopwords());
   STOPWORDS_VERSION = String(Date.now());
   // Stopwords affect trend-tokenization; invalidate caches immediately
   cache.clear();
@@ -1039,7 +1100,7 @@ app.get("/api/admin/stopwords", authRequired, adminRequired, (req, res) => {
   return res.json({ words });
 });
 
-app.post("/api/admin/stopwords/add", authRequired, adminRequired, (req, res) => {
+app.post("/api/admin/stopwords/add", authRequired, adminRequired, async (req, res) => {
   const raw = req.body?.words ?? req.body?.word ?? "";
   const add = Array.isArray(raw)
     ? raw
@@ -1052,12 +1113,12 @@ app.post("/api/admin/stopwords/add", authRequired, adminRequired, (req, res) => 
   for (const w of add) next.add(normalizeStr(w).toLowerCase());
   const words = [...next].filter(Boolean).sort();
 
-  const persisted = writeStopwords(words);
-  reloadStopwords();
+  const persisted = await writeStopwords(words);
+  await reloadStopwords();
   return res.json({ ok: true, persisted, words });
 });
 
-app.post("/api/admin/stopwords/remove", authRequired, adminRequired, (req, res) => {
+app.post("/api/admin/stopwords/remove", authRequired, adminRequired, async (req, res) => {
   const raw = req.body?.words ?? req.body?.word ?? "";
   const remove = Array.isArray(raw)
     ? raw
@@ -1070,19 +1131,19 @@ app.post("/api/admin/stopwords/remove", authRequired, adminRequired, (req, res) 
   for (const w of remove) next.delete(normalizeStr(w).toLowerCase());
   const words = [...next].filter(Boolean).sort();
 
-  const persisted = writeStopwords(words);
-  reloadStopwords();
+  const persisted = await writeStopwords(words);
+  await reloadStopwords();
   return res.json({ ok: true, persisted, words });
 });
 
-app.put("/api/admin/stopwords", authRequired, adminRequired, (req, res) => {
+app.put("/api/admin/stopwords", authRequired, adminRequired, async (req, res) => {
   const raw = req.body?.words ?? [];
   const arr = Array.isArray(raw) ? raw : String(raw).split(/[\s,]+/);
   const words = arr.map((x) => normalizeStr(x).toLowerCase()).filter(Boolean);
   // de-dup
   const uniq = [...new Set(words)].sort();
-  const persisted = writeStopwords(uniq);
-  reloadStopwords();
+  const persisted = await writeStopwords(uniq);
+  await reloadStopwords();
   return res.json({ ok: true, persisted, words: uniq });
 });
 
@@ -1691,6 +1752,17 @@ app.get("*", (req, res) => {
   }
   return res.sendFile(indexPath);
 });
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`RI Portal server listening on port ${PORT}`);
-});
+
+async function bootstrap() {
+  try {
+    await reloadStopwords();
+  } catch (err) {
+    console.warn("[stopwords] Initial load failed:", err?.message || err);
+  }
+
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`RI Portal server listening on port ${PORT}`);
+  });
+}
+
+bootstrap();
