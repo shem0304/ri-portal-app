@@ -15,6 +15,19 @@ export default function Network() {
   const { trendFilters } = useOutletContext();
   const f = trendFilters || { scope: 'all', institute: '', year: '', q: '' };
 
+  const buildRelatedUrl = React.useCallback((kw) => {
+    const p = new URLSearchParams();
+    if (kw) p.set('keyword', kw);
+    // 1st/2nd/3rd combo selections: scope / institute / year
+    if (f.scope) p.set('scope', f.scope);
+    // always carry institute selection for UI sync (use '기관 전체' when empty)
+    p.set('institute', (f.institute && f.institute.trim()) ? f.institute.trim() : '기관 전체');
+    // carry year even when empty so the target page can keep the selection state
+    p.set('year', f.year || '');
+    return `/trends/related?${p.toString()}`;
+  }, [f.scope, f.institute, f.year]);
+
+
   const [topKeywords, setTopKeywords] = React.useState(120);
   const [edgeTop, setEdgeTop] = React.useState(400);
   const [net, setNet] = React.useState({ nodes: [], edges: [] });
@@ -145,10 +158,10 @@ export default function Network() {
         params.set('topKeywords', String(topKeywords));
         params.set('edgeTop', String(edgeTop));
         params.set('scope', f.scope || 'all');
-        params.set('institute', f.institute || '');
-        params.set('year', f.year || '');
+        if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
+        if (f.year) params.set('year', f.year);
         if (f.q) params.set('q', f.q);
-const res = await apiFetch(`/api/trends/network?${params.toString()}`);
+        const res = await apiFetch(`/api/trends/network?${params.toString()}`);
         if (alive) setNet(res);
       } catch {
         if (alive) setNet({ nodes: [], edges: [] });
@@ -199,10 +212,10 @@ const res = await apiFetch(`/api/trends/network?${params.toString()}`);
         const params = new URLSearchParams();
         params.set('keyword', selected);
         params.set('scope', f.scope || 'all');
-        params.set('institute', f.institute || '');
-        params.set('year', f.year || '');
+        if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
+        if (f.year) params.set('year', f.year);
         if (f.q) params.set('q', f.q);
-const s = await apiFetch(`/api/trends/keyword?${params.toString()}`);
+        const s = await apiFetch(`/api/trends/keyword?${params.toString()}`);
         if (alive) setSeries(s);
       } catch {
         if (alive) setSeries(null);
@@ -214,10 +227,10 @@ const s = await apiFetch(`/api/trends/keyword?${params.toString()}`);
           params.set('keyword', selected);
           params.set('limit', '50');
           params.set('scope', f.scope || 'all');
-        params.set('institute', f.institute || '');
-        params.set('year', f.year || '');
-        if (f.q) params.set('q', f.q);
-const rr = await apiFetch(`/api/trends/related?${params.toString()}`, { auth: true });
+          if (f.institute && f.institute !== '기관 전체') params.set('institute', f.institute);
+          if (f.year) params.set('year', f.year);
+          if (f.q) params.set('q', f.q);
+          const rr = await apiFetch(`/api/trends/related?${params.toString()}`, { auth: true });
           if (alive) setRelated(rr);
         } catch {
           if (alive) setRelated(null);
@@ -423,12 +436,12 @@ const rr = await apiFetch(`/api/trends/related?${params.toString()}`, { auth: tr
                   const isLoggedIn = !!user;
                   if (!isLoggedIn) return;
                   if (navMode === 'click') {
-                    navigate(`/trends/related?keyword=${encodeURIComponent(id)}`);
+                    navigate(buildRelatedUrl(id));
                     return;
                   }
                   if (navMode === 'dblclick') {
                     const clicks = evt?.detail || 1;
-                    if (clicks >= 2) navigate(`/trends/related?keyword=${encodeURIComponent(id)}`);
+                    if (clicks >= 2) navigate(buildRelatedUrl(id));
                   }
                 }}
               />
@@ -439,7 +452,7 @@ const rr = await apiFetch(`/api/trends/related?${params.toString()}`, { auth: tr
                 Hover: {hover || '-'} · Click: {selected || '-'}
               </Typography>
               {selected && user ? (
-                <Button size='small' variant='outlined' onClick={() => navigate(`/trends/related?keyword=${encodeURIComponent(selected)}`)}>
+                <Button size='small' variant='outlined' onClick={() => navigate(buildRelatedUrl(selected))}>
                   관련 보고서 바로가기
                 </Button> ) : null}
             </Stack>
@@ -490,7 +503,7 @@ const rr = await apiFetch(`/api/trends/related?${params.toString()}`, { auth: tr
                         <Typography variant='caption' color='text.secondary'>{r.year} · {r.institute}</Typography>
                         <Divider sx={{ mt: 1 }} />
                       </Box> ))}
-                    <Button size='small' onClick={() => navigate(`/trends/related?keyword=${encodeURIComponent(selected)}`)} sx={{ mt: 1 }}>전체 보기</Button>
+                    <Button size='small' onClick={() => navigate(buildRelatedUrl(selected))} sx={{ mt: 1 }}>전체 보기</Button>
                   </Box> ) : (
                   <Typography variant='body2' color='text.secondary'>해당 키워드로 매칭되는 보고서가 없습니다.</Typography> )}
               </Box> )}
