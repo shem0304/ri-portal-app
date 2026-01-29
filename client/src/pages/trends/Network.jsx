@@ -234,109 +234,102 @@ export default function Network() {
 
   if (!net) return <Typography>로딩 중…</Typography>;
 
-    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-
-  const fitText = (ctx, text, maxWidth) => {
-    if (!text) return '';
-    if (ctx.measureText(text).width <= maxWidth) return text;
-    let t = text;
-    while (t.length > 2 && ctx.measureText(`${t}…`).width > maxWidth) t = t.slice(0, -1);
-    return `${t}…`;
+  
+  // Canvas helpers
+  const roundRectPath = (ctx, x, y, w, h, r) => {
+    const rr = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.lineTo(x + w - rr, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+    ctx.lineTo(x + w, y + h - rr);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+    ctx.lineTo(x + rr, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+    ctx.lineTo(x, y + rr);
+    ctx.quadraticCurveTo(x, y, x + rr, y);
+    ctx.closePath();
   };
 
-  // Draw a readable label for a node.
-  // - Prefer center label if it fits inside the node.
-  // - Otherwise, place it outside (to the right) with a small background tag + leader line.
-  const paintNodeLabel = (node, ctx, globalScale, opts = {}) => {
+  const paintNodeLabel = (node, ctx, globalScale) => {
     const id = String(node.id || '');
     if (!id) return;
 
-    const gs = Number(globalScale || 1); // <1 zoom out, >1 zoom in
-    const x = Number(node.x || 0);
-    const y = Number(node.y || 0);
+    const gs = Number(globalScale || 1);
     const s = Number(node.size || 1);
-    const r = Number(opts.r || (4 + Math.sqrt(s) * 2.2));
+    const x = node.x || 0;
+    const y = node.y || 0;
 
-    const isSelected = !!opts.isSelected;
-    const isHovered = !!opts.isHovered;
+    // Node radius (keep consistent with node draw)
+    const r = 4 + Math.sqrt(s) * 2.2;
 
-    // Smaller fonts when zoomed out; bigger when zoomed in.
-    const boost = (isSelected ? 1.25 : 1) * (isHovered ? 1.15 : 1);
-    const fontSize = clamp(9 * Math.sqrt(gs) * boost, 5, 15);
-    const fontWeight = (isSelected || isHovered) ? 700 : 500;
-    ctx.font = `${fontWeight} ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
+    const isSelected = id === selected;
+    const isHover = id === hover;
+    const isNeighbor = !!selected && selectedSet.has(id);
 
-    // Decide placement
-    const insideMaxWidth = Math.max(6, (r - 2) * 2);
-    const textInside = ctx.measureText(id).width <= insideMaxWidth && fontSize <= r * 0.9;
+    // Show as many labels as possible, but avoid turning into an unreadable blob when zoomed out.
+    // - zoomed out: show only important + hovered/selected/neighbor
+    // - zoomed in: show all
+    let show = true;
+    if (gs < 0.85) show = isSelected || isHover || isNeighbor || topLabelSet40.has(id);
+    else if (gs < 1.25) show = isSelected || isHover || isNeighbor || topLabelSet80.has(id);
+    if (!show) return;
 
-    // Visibility: even when nodes are dimmed, keep labels readable.
-    const prevAlpha = ctx.globalAlpha;
-    ctx.globalAlpha = Math.max(prevAlpha, isSelected || isHovered ? 1 : 0.45);
+    // Truncate a bit more when zoomed out.
+    const maxChars = gs < 1 ? 10 : 16;
+    let label = id;
+    if (label.length > maxChars) label = `${label.slice(0, maxChars - 1)}…`;
 
-    if (textInside) {
-      // Center label
-      const label = fitText(ctx, id, insideMaxWidth);
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      // white stroke to stand out on lines/edges
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-      ctx.strokeText(label, x, y);
-      ctx.lineWidth = 1;
-      ctx.fillStyle = '#111';
-      ctx.fillText(label, x, y);
-      ctx.globalAlpha = prevAlpha;
-      return;
+    // Font: keep small, and prevent "zoom-out = huge labels" (buggy with 1/gs).
+    // We partially compensate only when zoomed in, so zooming out naturally shrinks labels.
+    const fontSize = Math.max(5, Math.min(9, 9 / Math.max(gs, 1)));
+    ctx.font = `500 ${fontSize}px "Noto Sans KR", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const textW = ctx.measureText(label).width;
+    const padX = 3;
+    const padY = 2;
+    const boxW = textW + padX * 2;
+    const boxH = fontSize + padY * 2;
+
+    // If it doesn't fit inside, put it outside with a leader line + tag background.
+    const fitsInside = boxW <= r * 1.7;
+    let tx = x;
+    let ty = y;
+
+    if (!fitsInside) {
+      const off = r + 8;
+      tx = x + off + boxW / 2;
+      ty = y;
+
+      // leader line (thin gray)
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(x + r * 0.55, y);
+      ctx.lineTo(x + off, y);
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+      ctx.lineWidth = 0.8 / Math.max(gs, 1);
+      ctx.stroke();
+      ctx.restore();
     }
 
-    // Outside label (to the right)
-    const maxWidth = clamp(120 * gs, 60, 190);
-    const label = fitText(ctx, id, maxWidth);
-
-    const padX = 4;
-    const padY = 2;
-    const w = Math.min(maxWidth, ctx.measureText(label).width);
-    const h = fontSize + padY * 2;
-
-    const lx = x + r + 6;
-    const ly = y;
-
-    // Leader line (helps linking label to node in dense graphs)
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(lx - 2, ly);
-    ctx.strokeStyle = 'rgba(140,140,140,0.45)';
-    ctx.lineWidth = 0.8;
-    ctx.stroke();
-
-    // Background tag for readability
-    const rx = lx - padX;
-    const ry = ly - h / 2;
-    const rw = w + padX * 2;
-    const rh = h;
-
-    const radius = 4;
-    ctx.beginPath();
-    ctx.moveTo(rx + radius, ry);
-    ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, radius);
-    ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, radius);
-    ctx.arcTo(rx, ry + rh, rx, ry, radius);
-    ctx.arcTo(rx, ry, rx + rw, ry, radius);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    // Background tag (keeps readable over edges)
+    ctx.save();
+    ctx.globalAlpha = (isSelected || isHover) ? 1 : 0.92;
+    roundRectPath(ctx, tx - boxW / 2, ty - boxH / 2, boxW, boxH, 3);
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
     ctx.fill();
-    ctx.strokeStyle = 'rgba(160,160,160,0.35)';
-    ctx.lineWidth = 0.6;
+    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+    ctx.lineWidth = 0.8 / Math.max(gs, 1);
     ctx.stroke();
 
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
+    // Text (black, not bold-looking)
     ctx.fillStyle = '#111';
-    ctx.fillText(label, lx, ly);
-
-    ctx.globalAlpha = prevAlpha;
+    ctx.fillText(label, tx, ty);
+    ctx.restore();
   };
+
 
   const graphData = React.useMemo(() => ({
     nodes: (net?.nodes || []).map((n) => ({ ...n })),
@@ -346,6 +339,20 @@ export default function Network() {
   const maxNodeSize = React.useMemo(
     () => Math.max(1, ...graphData.nodes.map((n) => Number(n.size || 1))),
     [graphData] );
+
+
+  const topLabelSet40 = React.useMemo(() => {
+    const nodes = Array.isArray(graphData?.nodes) ? [...graphData.nodes] : [];
+    nodes.sort((a, b) => Number(b.size || 1) - Number(a.size || 1));
+    return new Set(nodes.slice(0, Math.min(40, nodes.length)).map((n) => String(n.id)));
+  }, [graphData]);
+
+  const topLabelSet80 = React.useMemo(() => {
+    const nodes = Array.isArray(graphData?.nodes) ? [...graphData.nodes] : [];
+    nodes.sort((a, b) => Number(b.size || 1) - Number(a.size || 1));
+    return new Set(nodes.slice(0, Math.min(80, nodes.length)).map((n) => String(n.id)));
+  }, [graphData]);
+
 
   return (
     <Box>
@@ -377,7 +384,7 @@ export default function Network() {
                   <MenuItem value='select'>선택만</MenuItem>                  <MenuItem value='click'>클릭 시 관련보고서 이동</MenuItem>
                 </Select>
               </FormControl>
-              <Typography variant='caption' color='text.secondary'>줌을 확대하면 라벨이 더 많이 표시됩니다. (색상: 기본 노드=회색, 선택 노드=빨강 + Halo)</Typography>
+              <Typography variant='caption' color='text.secondary'>줌을 확대하면 라벨이 더 많이 표시됩니다. (노드=흰색, 테두리=회색)</Typography>
             </Stack>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ sm: 'center' }} sx={{ mt: 1 }}>
@@ -434,18 +441,15 @@ export default function Network() {
 
                   // Dim non-focused nodes
                   ctx.save();
-                  ctx.globalAlpha = isFocus ? 1 : 0.18;
+                  ctx.globalAlpha = isFocus ? 1 : 0.08;
 
-                  // Halo ring for selected node
+                  // Halo ring for selected node (subtle)
                   if (isSelected) {
                     ctx.beginPath();
-                    ctx.arc(x, y, r + 5, 0, 2 * Math.PI, false);
-                    ctx.strokeStyle = '#FFD54F';
-                    ctx.lineWidth = 6;
-                    ctx.shadowColor = 'rgba(255,213,79,0.9)';
-                    ctx.shadowBlur = 12;
+                    ctx.arc(x, y, r + 4, 0, 2 * Math.PI, false);
+                    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
+                    ctx.lineWidth = 2;
                     ctx.stroke();
-                    ctx.shadowBlur = 0;
                   }
 
                   // Node circle
@@ -453,14 +457,18 @@ export default function Network() {
                   ctx.arc(x, y, r, 0, 2 * Math.PI, false);
                   ctx.fillStyle = '#FFFFFF';
                   ctx.fill();
-                  ctx.lineWidth = isSelected ? 1.4 : 0.9;
-                  ctx.strokeStyle = '#B0B0B0';
+                  ctx.lineWidth = isSelected ? 1.6 : 0.8;
+                  ctx.strokeStyle = '#9E9E9E';
                   ctx.stroke();
-// Labels: always show, but make selected larger/bolder
-                  paintNodeLabel(node, ctx, globalScale, { r, isSelected, isHovered: id === hover });
+
+                  // Labels: always show, but make selected larger/bolder                  // Labels: keep readable even when non-focused nodes are dimmed
+                  const _prevAlpha = ctx.globalAlpha;
+                  ctx.globalAlpha = isFocus ? 1 : 0.35;
+                  paintNodeLabel(node, ctx, globalScale);
+                  ctx.globalAlpha = _prevAlpha;
                   ctx.restore();
                 }}
-                nodeColor={(n) => '#FFFFFF'}
+                nodeColor={() => '#FFFFFF'}
                 linkColor={(l) => `rgba(0,0,0,${linkAlpha(l)})`}
                 nodeRelSize={4}
                 nodeVal={(n) => n.size || 1}
