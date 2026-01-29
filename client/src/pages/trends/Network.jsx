@@ -242,9 +242,7 @@ export default function Network() {
 
     // Node radius (keep in sync with nodeCanvasObject)
     const r = 4 + Math.sqrt(s) * 2.2;
-
-    // Avoid clutter: very tiny nodes won't render center text
-    if ((r / gs) < 6) return;
+    // Render label even for small nodes (font will shrink)
 
     // Center label in the node
     const x = node.x || 0;
@@ -270,13 +268,8 @@ export default function Network() {
       else fontSize -= 1;
     }
 
-    // Outline + fill for readability
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = Math.max(2, fontSize * 0.35);
-    ctx.strokeStyle = theme.palette.background.default;
-    ctx.strokeText(label, x, y);
-
-    ctx.fillStyle = '#FFFFFF';
+    // Text (black) centered in node
+    ctx.fillStyle = '#000000';
     ctx.fillText(label, x, y);
   };
 
@@ -393,17 +386,17 @@ export default function Network() {
                   // Node circle
                   ctx.beginPath();
                   ctx.arc(x, y, r, 0, 2 * Math.PI, false);
-                  ctx.fillStyle = isSelected ? '#E53935' : '#9E9E9E';
+                  ctx.fillStyle = '#FFFFFF';
                   ctx.fill();
-                  ctx.lineWidth = isSelected ? 3 : 1;
-                  ctx.strokeStyle = theme.palette.divider;
+                  ctx.lineWidth = isSelected ? 2.5 : 1.5;
+                  ctx.strokeStyle = '#000000';
                   ctx.stroke();
 
                   // Labels: always show, but make selected larger/bolder
                   paintNodeLabel({ ...node, _boost: isSelected ? 1 : 0 }, ctx, globalScale);
                   ctx.restore();
                 }}
-                nodeColor={(n) => (n.id === selected ? '#E53935' : '#9E9E9E')}
+                nodeColor={() => '#FFFFFF'}
                 linkColor={(l) => `rgba(0,0,0,${linkAlpha(l)})`}
                 nodeRelSize={4}
                 nodeVal={(n) => n.size || 1}
