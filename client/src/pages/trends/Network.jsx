@@ -234,62 +234,109 @@ export default function Network() {
 
   if (!net) return <Typography>로딩 중…</Typography>;
 
-  
-const paintNodeLabel = (node, ctx, globalScale, opts = {}) => {
-  const id = String(node?.id || '');
-  if (!id) return;
+    const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-  const s = Number(node.size || 1);
-  const x = node.x || 0;
-  const y = node.y || 0;
-  const r = 4 + Math.sqrt(s) * 2.2;
+  const fitText = (ctx, text, maxWidth) => {
+    if (!text) return '';
+    if (ctx.measureText(text).width <= maxWidth) return text;
+    let t = text;
+    while (t.length > 2 && ctx.measureText(`${t}…`).width > maxWidth) t = t.slice(0, -1);
+    return `${t}…`;
+  };
 
-  const gs = Math.max(0.001, Number(globalScale || 1));
+  // Draw a readable label for a node.
+  // - Prefer center label if it fits inside the node.
+  // - Otherwise, place it outside (to the right) with a small background tag + leader line.
+  const paintNodeLabel = (node, ctx, globalScale, opts = {}) => {
+    const id = String(node.id || '');
+    if (!id) return;
 
-  // When zoomed in, show more labels. When zoomed out, keep it readable.
-  const showAll = gs > 2.2;
-  const isImportant = !!opts.important;
-  const isSelected = !!opts.selected;
-  const isHover = !!opts.hover;
-  if (!(showAll || isImportant || isSelected || isHover)) return;
+    const gs = Number(globalScale || 1); // <1 zoom out, >1 zoom in
+    const x = Number(node.x || 0);
+    const y = Number(node.y || 0);
+    const s = Number(node.size || 1);
+    const r = Number(opts.r || (4 + Math.sqrt(s) * 2.2));
 
-  // If the node is too small and it's not selected/hovered, skip label.
-  if (r < 7 && !(isSelected || isHover) && !showAll) return;
+    const isSelected = !!opts.isSelected;
+    const isHovered = !!opts.isHovered;
 
-  // Font size: keep reasonably constant on screen, but don't exceed the node.
-  let fontSize = 12 / gs;
-  fontSize = Math.max(8, Math.min(16, fontSize));
-  if (isSelected) fontSize = Math.min(18, fontSize * 1.25);
-  if (isHover) fontSize = Math.min(18, fontSize * 1.15);
-  fontSize = Math.min(fontSize, Math.max(9, r * 0.85));
-  ctx.font = `${fontSize}px sans-serif`;
+    // Smaller fonts when zoomed out; bigger when zoomed in.
+    const boost = (isSelected ? 1.25 : 1) * (isHovered ? 1.15 : 1);
+    const fontSize = clamp(9 * Math.sqrt(gs) * boost, 5, 15);
+    const fontWeight = (isSelected || isHovered) ? 700 : 500;
+    ctx.font = `${fontWeight} ${fontSize}px system-ui, -apple-system, Segoe UI, Roboto, sans-serif`;
 
-  // Fit label inside the node (truncate with ellipsis)
-  const maxWidth = Math.max(18, r * 1.75);
-  let label = id;
-  const ell = '…';
-  if (ctx.measureText(label).width > maxWidth) {
-    let lo = 0;
-    let hi = label.length;
-    while (lo < hi) {
-      const mid = Math.ceil((lo + hi) / 2);
-      const test = label.slice(0, mid) + ell;
-      if (ctx.measureText(test).width <= maxWidth) lo = mid;
-      else hi = mid - 1;
+    // Decide placement
+    const insideMaxWidth = Math.max(6, (r - 2) * 2);
+    const textInside = ctx.measureText(id).width <= insideMaxWidth && fontSize <= r * 0.9;
+
+    // Visibility: even when nodes are dimmed, keep labels readable.
+    const prevAlpha = ctx.globalAlpha;
+    ctx.globalAlpha = Math.max(prevAlpha, isSelected || isHovered ? 1 : 0.45);
+
+    if (textInside) {
+      // Center label
+      const label = fitText(ctx, id, insideMaxWidth);
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      // white stroke to stand out on lines/edges
+      ctx.lineWidth = 3;
+      ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+      ctx.strokeText(label, x, y);
+      ctx.lineWidth = 1;
+      ctx.fillStyle = '#111';
+      ctx.fillText(label, x, y);
+      ctx.globalAlpha = prevAlpha;
+      return;
     }
-    label = (lo > 0 ? label.slice(0, lo) + ell : ell);
-  }
 
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
+    // Outside label (to the right)
+    const maxWidth = clamp(120 * gs, 60, 190);
+    const label = fitText(ctx, id, maxWidth);
 
-  // White outline + black fill for visibility on any background
-  ctx.lineWidth = Math.max(2, fontSize * 0.28);
-  ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-  ctx.strokeText(label, x, y);
-  ctx.fillStyle = '#000000';
-  ctx.fillText(label, x, y);
-};
+    const padX = 4;
+    const padY = 2;
+    const w = Math.min(maxWidth, ctx.measureText(label).width);
+    const h = fontSize + padY * 2;
+
+    const lx = x + r + 6;
+    const ly = y;
+
+    // Leader line (helps linking label to node in dense graphs)
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(lx - 2, ly);
+    ctx.strokeStyle = 'rgba(140,140,140,0.45)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+
+    // Background tag for readability
+    const rx = lx - padX;
+    const ry = ly - h / 2;
+    const rw = w + padX * 2;
+    const rh = h;
+
+    const radius = 4;
+    ctx.beginPath();
+    ctx.moveTo(rx + radius, ry);
+    ctx.arcTo(rx + rw, ry, rx + rw, ry + rh, radius);
+    ctx.arcTo(rx + rw, ry + rh, rx, ry + rh, radius);
+    ctx.arcTo(rx, ry + rh, rx, ry, radius);
+    ctx.arcTo(rx, ry, rx + rw, ry, radius);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(160,160,160,0.35)';
+    ctx.lineWidth = 0.6;
+    ctx.stroke();
+
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#111';
+    ctx.fillText(label, lx, ly);
+
+    ctx.globalAlpha = prevAlpha;
+  };
 
   const graphData = React.useMemo(() => ({
     nodes: (net?.nodes || []).map((n) => ({ ...n })),
@@ -299,19 +346,6 @@ const paintNodeLabel = (node, ctx, globalScale, opts = {}) => {
   const maxNodeSize = React.useMemo(
     () => Math.max(1, ...graphData.nodes.map((n) => Number(n.size || 1))),
     [graphData] );
-
-// Labels can get crowded. Pin labels for the most important nodes (by size),
-// and always show labels for hovered/selected nodes. When zoomed in enough, show all.
-const pinnedLabelSet = React.useMemo(() => {
-  const nodes = Array.isArray(graphData?.nodes) ? graphData.nodes : [];
-  const top = [...nodes]
-    .sort((a, b) => Number(b.size || 1) - Number(a.size || 1))
-    .slice(0, 25)
-    .map((n) => String(n.id || ''))
-    .filter(Boolean);
-  return new Set(top);
-}, [graphData]);
-
 
   return (
     <Box>
@@ -400,15 +434,15 @@ const pinnedLabelSet = React.useMemo(() => {
 
                   // Dim non-focused nodes
                   ctx.save();
-                  ctx.globalAlpha = isFocus ? 1 : 0.08;
+                  ctx.globalAlpha = isFocus ? 1 : 0.18;
 
                   // Halo ring for selected node
                   if (isSelected) {
                     ctx.beginPath();
                     ctx.arc(x, y, r + 5, 0, 2 * Math.PI, false);
-                    ctx.strokeStyle = 'rgba(0,0,0,0.22)';
+                    ctx.strokeStyle = '#FFD54F';
                     ctx.lineWidth = 6;
-                    ctx.shadowColor = 'rgba(0,0,0,0.12)';
+                    ctx.shadowColor = 'rgba(255,213,79,0.9)';
                     ctx.shadowBlur = 12;
                     ctx.stroke();
                     ctx.shadowBlur = 0;
@@ -419,12 +453,11 @@ const pinnedLabelSet = React.useMemo(() => {
                   ctx.arc(x, y, r, 0, 2 * Math.PI, false);
                   ctx.fillStyle = '#FFFFFF';
                   ctx.fill();
-                  ctx.lineWidth = isSelected ? 1.6 : 0.9;
-                  ctx.strokeStyle = '#9AA0A6';  // light gray outline
+                  ctx.lineWidth = isSelected ? 1.4 : 0.9;
+                  ctx.strokeStyle = '#B0B0B0';
                   ctx.stroke();
-
-                  // Labels: always show, but make selected larger/bolder
-                  paintNodeLabel(node, ctx, globalScale, { selected: isSelected, hover: id === hover, important: pinnedLabelSet.has(String(id)) });
+// Labels: always show, but make selected larger/bolder
+                  paintNodeLabel(node, ctx, globalScale, { r, isSelected, isHovered: id === hover });
                   ctx.restore();
                 }}
                 nodeColor={(n) => '#FFFFFF'}
