@@ -10,6 +10,7 @@ const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage.jsx'));
 const AdminStopwordsPage = lazy(() => import('./pages/AdminStopwordsPage.jsx'));
 const TrendsIndex = lazy(() => import('./pages/trends/TrendsIndex.jsx'));
+const ChatPage = lazy(() => import('./pages/chat/Chat.jsx'));
 
 export default function App() {
   return (
@@ -23,6 +24,7 @@ export default function App() {
           <Route path="/admin/users" element={<ProtectedRoute><AdminUsersPage /></ProtectedRoute>} />
           <Route path="/admin/stopwords" element={<ProtectedRoute><AdminStopwordsPage /></ProtectedRoute>} />
           <Route path="/trends/*" element={<TrendsIndex />} />
+          <Route path="/chat" element={<ProtectedRoute><ChatPage /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>

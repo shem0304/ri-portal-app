@@ -10,6 +10,7 @@ import compression from "compression";
 import dotenv from "dotenv";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { createChatRouter } from "./server/src/chatRoutes.js";
 
 // Resolve paths reliably on Render (working directory can vary)
 const __filename = fileURLToPath(import.meta.url);
@@ -1016,6 +1017,15 @@ app.get("/api/auth/me", authRequired, async (req, res) => {
     },
   });
 });
+
+// -----------------------------
+// Chat API (proxy to hosting PHP)
+// -----------------------------
+const chatRouter = createChatRouter({
+  getSessionUserId: (req) => req.user?.sub || req.user?.id || req.user?.username,
+});
+app.use("/api/chat", authRequired, chatRouter);
+
 
 
 app.get("/api/admin/users", authRequired, adminRequired, async (req, res) => {
