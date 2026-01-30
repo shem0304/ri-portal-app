@@ -70,7 +70,7 @@ export default function AppLayout() {
       </List>
       <Divider />
       <Box sx={{ p: 2 }}>
-        <Typography variant='caption' color='text.secondary'>© 2026 RI Portal</Typography>
+        <Typography variant='caption' color='text.secondary'>© 2026 울산연구원</Typography>
       </Box>
     </Box>
   );
