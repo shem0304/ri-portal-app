@@ -10,6 +10,7 @@ import ScienceIcon from '@mui/icons-material/Science';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SpellcheckIcon from '@mui/icons-material/Spellcheck';
+import ChatIcon from '@mui/icons-material/Chat';
 import { useAuth } from '../state/AuthContext';
 
 const drawerWidth = 260;
@@ -44,6 +45,13 @@ export default function AppLayout() {
           <ListItemIcon><ScienceIcon /></ListItemIcon>
           <ListItemText primary='연구보고서' secondary={user ? '로그인됨' : '로그인 필요'} />
         </ListItemButton>
+
+        {user ? (
+          <ListItemButton component={NavLink} to='/chat'>
+            <ListItemIcon><ChatIcon /></ListItemIcon>
+            <ListItemText primary='채팅' secondary='등록된 사용자 간 대화' />
+          </ListItemButton>
+        ) : null}
 
 {user && (user.role || 'user') === 'admin' ? (
   <ListItemButton component={NavLink} to='/admin/users'>
