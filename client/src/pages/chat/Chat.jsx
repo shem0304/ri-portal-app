@@ -12,14 +12,31 @@ import {
   Button,
   IconButton,
   Alert,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 
 import { chatListConversations, chatListMessages, chatSend, chatUpload, chatStartDm } from "../../api/chat.js";
 
-function convTitle(c) {
-  // chat.php returns peer_id for dm; fall back gracefully
-  return c?.peer_id || c?.title || `대화 #${c?.id ?? ""}`;
+function authHeader() {
+  const token = localStorage.getItem("token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function fetchApprovedUsers() {
+  const res = await fetch("/api/users/approved", { headers: { ...authHeader() } });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, error: data?.error || res.statusText };
+  return { ok: true, users: data?.users || [] };
+}
+
+function userLabel(u) {
+  const name = u?.name || u?.username || u?.email || u?.id || "";
+  const org = u?.org ? String(u.org).trim() : "";
+  return org ? `${name} · ${org}` : name;
 }
 
 export default function Chat() {
@@ -28,10 +45,46 @@ export default function Chat() {
   const [msgs, setMsgs] = React.useState([]);
   const [afterId, setAfterId] = React.useState(0);
   const [text, setText] = React.useState("");
-  const [peer, setPeer] = React.useState("");
+  const [peer, setPeer] = React.useState(""); // peer user.id (uuid)
+  const [peers, setPeers] = React.useState([]);
   const [error, setError] = React.useState("");
   const pollRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
+
+  const peerLabelById = React.useMemo(() => {
+    const m = new Map();
+    for (const u of peers) m.set(u.id, userLabel(u));
+    return m;
+  }, [peers]);
+
+  const convTitle = React.useCallback(
+    (c) => {
+      const pid = c?.peer_id;
+      if (pid && peerLabelById.has(pid)) return peerLabelById.get(pid);
+      return pid || c?.title || `대화 #${c?.id ?? ""}`;
+    },
+    [peerLabelById]
+  );
+
+  const senderLabel = React.useCallback(
+    (senderId) => {
+      if (senderId && peerLabelById.has(senderId)) return peerLabelById.get(senderId);
+      return senderId || "";
+    },
+    [peerLabelById]
+  );
+
+  const loadPeers = React.useCallback(async () => {
+    try {
+      const r = await fetchApprovedUsers();
+      if (!r.ok) throw new Error(r.error || "사용자 목록 조회 실패");
+      setPeers(r.users || []);
+      setError("");
+    } catch (e) {
+      // 채팅은 열리되, 상대 선택만 못하게 에러로 노출
+      setError(String(e?.message || e));
+    }
+  }, []);
 
   const loadConvs = React.useCallback(async () => {
     try {
@@ -62,8 +115,9 @@ export default function Chat() {
   );
 
   React.useEffect(() => {
+    loadPeers();
     loadConvs();
-  }, [loadConvs]);
+  }, [loadPeers, loadConvs]);
 
   React.useEffect(() => {
     // polling (no websocket)
@@ -84,9 +138,9 @@ export default function Chat() {
 
   async function onStartDm() {
     try {
-      const p = String(peer || "").trim();
-      if (!p) return;
-      const r = await chatStartDm(p);
+      const peerId = String(peer || "").trim();
+      if (!peerId) return;
+      const r = await chatStartDm(peerId);
       if (!r.ok) throw new Error(r.error || "대화 시작 실패");
       await loadConvs();
       if (r.conversation_id) await onSelectConversation(r.conversation_id);
@@ -138,20 +192,32 @@ export default function Chat() {
       ) : null}
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
-        <Paper sx={{ width: { xs: "100%", md: 320 }, p: 1 }}>
+        <Paper sx={{ width: { xs: "100%", md: 360 }, p: 1 }}>
           <Typography variant="subtitle1" sx={{ px: 1, pb: 1 }}>
             대화
           </Typography>
 
           <Stack direction="row" spacing={1} sx={{ px: 1, pb: 1 }}>
-            <TextField
-              size="small"
-              placeholder="상대 사용자ID"
-              value={peer}
-              onChange={(e) => setPeer(e.target.value)}
-              fullWidth
-            />
-            <Button variant="contained" onClick={onStartDm}>
+            <FormControl size="small" fullWidth>
+              <InputLabel id="peer-select-label">상대 선택</InputLabel>
+              <Select
+                labelId="peer-select-label"
+                label="상대 선택"
+                value={peer}
+                onChange={(e) => setPeer(e.target.value)}
+              >
+                <MenuItem value="">
+                  <em>선택하세요</em>
+                </MenuItem>
+                {peers.map((u) => (
+                  <MenuItem key={u.id} value={u.id}>
+                    {userLabel(u)}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Button variant="contained" onClick={onStartDm} disabled={!peer}>
               시작
             </Button>
           </Stack>
@@ -186,7 +252,7 @@ export default function Chat() {
             {msgs.map((m) => (
               <Box key={m.id} sx={{ mb: 1 }}>
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  {m.sender_id} · {m.created_at}
+                  {senderLabel(m.sender_id)} · {m.created_at}
                 </Typography>
                 {m.body ? <Typography variant="body2">{m.body}</Typography> : null}
                 {Array.isArray(m.attachments) && m.attachments.length ? (
@@ -194,7 +260,9 @@ export default function Chat() {
                     {m.attachments.map((a) => (
                       <Typography key={a.id} variant="body2">
                         📎{" "}
-                        <a href={a.url} target="_blank" rel="noreferrer">{a.filename}</a>
+                        <a href={a.url} target="_blank" rel="noreferrer">
+                          {a.filename}
+                        </a>
                         {a.size ? ` (${Math.round(a.size / 1024)}KB)` : ""}
                       </Typography>
                     ))}
