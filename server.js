@@ -1017,30 +1017,14 @@ app.get("/api/auth/me", authRequired, async (req, res) => {
     },
   });
 });
-// Public-ish users list for chat peer picker (approved users only)
-app.get("/api/users/approved", authRequired, async (req, res) => {
-  const meId = req.user?.sub;
-  const all = await readUsers();
-  const users = all
-    .filter((u) => (u.status || "approved") === "approved")
-    .filter((u) => !meId || u.id !== meId)
-    .map((u) => ({
-      id: u.id,
-      username: u.username,
-      email: u.email,
-      name: u.name || u.username || u.email || u.id,
-      org: u.org || "",
-    }));
-  return res.json({ users });
-});
-
-
 
 // -----------------------------
 // Chat API (proxy to hosting PHP)
 // -----------------------------
 const chatRouter = createChatRouter({
   getSessionUserId: (req) => req.user?.sub || req.user?.id || req.user?.username,
+  // For the DM user combobox
+  listUsers: async () => await readUsers(),
 });
 app.use("/api/chat", authRequired, chatRouter);
 

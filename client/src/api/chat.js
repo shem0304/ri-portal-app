@@ -23,6 +23,10 @@ export async function chatSend(conversationId, body) {
   return apiFetch("/api/chat/send", { method: "POST", body: { conversationId, body }, auth: true });
 }
 
+export async function chatListUsers() {
+  return apiFetch("/api/chat/users", { auth: true });
+}
+
 export async function chatUpload(conversationId, file) {
   const token = getToken();
   const form = new FormData();

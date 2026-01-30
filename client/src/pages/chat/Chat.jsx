@@ -12,31 +12,30 @@ import {
   Button,
   IconButton,
   Alert,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
+  Autocomplete,
 } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 
-import { chatListConversations, chatListMessages, chatSend, chatUpload, chatStartDm } from "../../api/chat.js";
+import {
+  chatListConversations,
+  chatListMessages,
+  chatSend,
+  chatUpload,
+  chatStartDm,
+  chatListUsers,
+} from "../../api/chat.js";
 
-function authHeader() {
-  const token = localStorage.getItem("token");
-  return token ? { Authorization: `Bearer ${token}` } : {};
+function convTitle(c) {
+  // chat.php returns peer_id for dm; fall back gracefully
+  return c?.peer_id || c?.title || `대화 #${c?.id ?? ""}`;
 }
 
-async function fetchApprovedUsers() {
-  const res = await fetch("/api/users/approved", { headers: { ...authHeader() } });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) return { ok: false, error: data?.error || res.statusText };
-  return { ok: true, users: data?.users || [] };
-}
-
-function userLabel(u) {
-  const name = u?.name || u?.username || u?.email || u?.id || "";
-  const org = u?.org ? String(u.org).trim() : "";
-  return org ? `${name} · ${org}` : name;
+function displayName(u) {
+  const org = String(u?.org || "").trim();
+  const name = String(u?.name || "").trim();
+  const fallback = String(u?.username || u?.email || u?.id || "").trim();
+  const base = [org, name].filter(Boolean).join(" ");
+  return base || fallback || "(알 수 없음)";
 }
 
 export default function Chat() {
@@ -44,44 +43,32 @@ export default function Chat() {
   const [activeId, setActiveId] = React.useState(null);
   const [msgs, setMsgs] = React.useState([]);
   const [afterId, setAfterId] = React.useState(0);
+
   const [text, setText] = React.useState("");
-  const [peer, setPeer] = React.useState(""); // peer user.id (uuid)
-  const [peers, setPeers] = React.useState([]);
+  const [users, setUsers] = React.useState([]);
+  const [peerUser, setPeerUser] = React.useState(null);
+
   const [error, setError] = React.useState("");
   const pollRef = React.useRef(null);
+  const usersPollRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
 
-  const peerLabelById = React.useMemo(() => {
+  const userLabelMap = React.useMemo(() => {
     const m = new Map();
-    for (const u of peers) m.set(u.id, userLabel(u));
+    for (const u of users || []) {
+      if (u?.id) m.set(String(u.id), displayName(u));
+    }
     return m;
-  }, [peers]);
+  }, [users]);
 
-  const convTitle = React.useCallback(
-    (c) => {
-      const pid = c?.peer_id;
-      if (pid && peerLabelById.has(pid)) return peerLabelById.get(pid);
-      return pid || c?.title || `대화 #${c?.id ?? ""}`;
-    },
-    [peerLabelById]
-  );
-
-  const senderLabel = React.useCallback(
-    (senderId) => {
-      if (senderId && peerLabelById.has(senderId)) return peerLabelById.get(senderId);
-      return senderId || "";
-    },
-    [peerLabelById]
-  );
-
-  const loadPeers = React.useCallback(async () => {
+  const loadUsers = React.useCallback(async () => {
     try {
-      const r = await fetchApprovedUsers();
+      const r = await chatListUsers();
       if (!r.ok) throw new Error(r.error || "사용자 목록 조회 실패");
-      setPeers(r.users || []);
+      setUsers(r.users || []);
       setError("");
     } catch (e) {
-      // 채팅은 열리되, 상대 선택만 못하게 에러로 노출
+      // Don't block the whole chat UI for this; but surface the error.
       setError(String(e?.message || e));
     }
   }, []);
@@ -115,9 +102,19 @@ export default function Chat() {
   );
 
   React.useEffect(() => {
-    loadPeers();
+    loadUsers();
     loadConvs();
-  }, [loadPeers, loadConvs]);
+  }, [loadUsers, loadConvs]);
+
+  React.useEffect(() => {
+    // refresh online status periodically
+    if (usersPollRef.current) clearInterval(usersPollRef.current);
+    usersPollRef.current = setInterval(() => loadUsers(), 7000);
+    return () => {
+      if (usersPollRef.current) clearInterval(usersPollRef.current);
+      usersPollRef.current = null;
+    };
+  }, [loadUsers]);
 
   React.useEffect(() => {
     // polling (no websocket)
@@ -138,13 +135,14 @@ export default function Chat() {
 
   async function onStartDm() {
     try {
-      const peerId = String(peer || "").trim();
+      const peerId = String(peerUser?.id || "").trim();
       if (!peerId) return;
+
       const r = await chatStartDm(peerId);
       if (!r.ok) throw new Error(r.error || "대화 시작 실패");
       await loadConvs();
       if (r.conversation_id) await onSelectConversation(r.conversation_id);
-      setPeer("");
+      setPeerUser(null);
     } catch (e) {
       setError(String(e?.message || e));
     }
@@ -197,27 +195,40 @@ export default function Chat() {
             대화
           </Typography>
 
-          <Stack direction="row" spacing={1} sx={{ px: 1, pb: 1 }}>
-            <FormControl size="small" fullWidth>
-              <InputLabel id="peer-select-label">상대 선택</InputLabel>
-              <Select
-                labelId="peer-select-label"
-                label="상대 선택"
-                value={peer}
-                onChange={(e) => setPeer(e.target.value)}
-              >
-                <MenuItem value="">
-                  <em>선택하세요</em>
-                </MenuItem>
-                {peers.map((u) => (
-                  <MenuItem key={u.id} value={u.id}>
-                    {userLabel(u)}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-
-            <Button variant="contained" onClick={onStartDm} disabled={!peer}>
+          <Stack spacing={1} sx={{ px: 1, pb: 1 }}>
+            <Autocomplete
+              size="small"
+              options={users || []}
+              value={peerUser}
+              onChange={(_e, v) => setPeerUser(v)}
+              getOptionLabel={(o) => displayName(o)}
+              isOptionEqualToValue={(o, v) => String(o?.id) === String(v?.id)}
+              renderOption={(props, option) => (
+                <li {...props} key={option.id}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1, width: "100%" }}>
+                    <Box
+                      sx={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: "50%",
+                        bgcolor: option.online ? "#2e7d32" : "#9e9e9e",
+                        flex: "0 0 auto",
+                      }}
+                    />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" noWrap>
+                        {displayName(option)}
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: "text.secondary" }} noWrap>
+                        {option.id}
+                      </Typography>
+                    </Box>
+                  </Box>
+                </li>
+              )}
+              renderInput={(params) => <TextField {...params} placeholder="상대 선택 (승인된 사용자)" />}
+            />
+            <Button variant="contained" onClick={onStartDm} disabled={!peerUser?.id}>
               시작
             </Button>
           </Stack>
@@ -249,27 +260,31 @@ export default function Chat() {
 
           <Divider />
           <Box sx={{ flex: 1, overflow: "auto", p: 1 }}>
-            {msgs.map((m) => (
-              <Box key={m.id} sx={{ mb: 1 }}>
-                <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                  {senderLabel(m.sender_id)} · {m.created_at}
-                </Typography>
-                {m.body ? <Typography variant="body2">{m.body}</Typography> : null}
-                {Array.isArray(m.attachments) && m.attachments.length ? (
-                  <Box sx={{ mt: 0.25 }}>
-                    {m.attachments.map((a) => (
-                      <Typography key={a.id} variant="body2">
-                        📎{" "}
-                        <a href={a.url} target="_blank" rel="noreferrer">
-                          {a.filename}
-                        </a>
-                        {a.size ? ` (${Math.round(a.size / 1024)}KB)` : ""}
-                      </Typography>
-                    ))}
-                  </Box>
-                ) : null}
-              </Box>
-            ))}
+            {msgs.map((m) => {
+              const senderId = String(m.sender_id || "");
+              const senderLabel = userLabelMap.get(senderId) || senderId;
+              return (
+                <Box key={m.id} sx={{ mb: 1 }}>
+                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                    {senderLabel} · {m.created_at}
+                  </Typography>
+                  {m.body ? <Typography variant="body2">{m.body}</Typography> : null}
+                  {Array.isArray(m.attachments) && m.attachments.length ? (
+                    <Box sx={{ mt: 0.25 }}>
+                      {m.attachments.map((a) => (
+                        <Typography key={a.id} variant="body2">
+                          📎{" "}
+                          <a href={a.url} target="_blank" rel="noreferrer">
+                            {a.filename}
+                          </a>
+                          {a.size ? ` (${Math.round(a.size / 1024)}KB)` : ""}
+                        </Typography>
+                      ))}
+                    </Box>
+                  ) : null}
+                </Box>
+              );
+            })}
             {!msgs.length ? (
               <Typography variant="body2" sx={{ p: 2, color: "text.secondary" }}>
                 메시지가 없습니다.
