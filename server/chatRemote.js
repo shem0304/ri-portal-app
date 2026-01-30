@@ -1,249 +1,122 @@
-// server/chatRemote.js - Node helper to call hosting PHP chat API (MySQL via PHP)
-import { request as httpsRequest } from "node:https";
-import { request as httpRequest } from "node:http";
+// server/chatRemote.js
+// Robust HTTP client for calling remote PHP (chat.php) even when hosting sends malformed chunked responses.
+// - Forces 'Accept-Encoding: identity' and 'Connection: close'
+// - Uses insecureHTTPParser to tolerate some broken chunked encodings on old/proxied servers
+// - Retries https->http when 443 is refused
+import http from "node:http";
+import https from "node:https";
 import { URL } from "node:url";
-import FormData from "form-data";
-import fs from "node:fs";
 
-const CHAT_REMOTE_URL = process.env.CHAT_REMOTE_URL || "";
-const STORAGE_TOKEN = process.env.STORAGE_TOKEN || "";
-const TIMEOUT_MS = parseInt(process.env.REMOTE_CHAT_TIMEOUT_MS || "5000", 10);
+const DEFAULT_TIMEOUT_MS = Number(process.env.REMOTE_CHAT_TIMEOUT_MS || 5000);
+const DEFAULT_UPLOAD_TIMEOUT_MS = Number(process.env.REMOTE_CHAT_UPLOAD_TIMEOUT_MS || 15000);
 
-function getBaseUrl() {
-  const base = String(CHAT_REMOTE_URL || "").trim();
-  return base ? base : null;
-}
+function requestText(urlStr, { method="GET", headers={}, body=null, timeoutMs=DEFAULT_TIMEOUT_MS } = {}) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(urlStr);
+    const isHttps = url.protocol === "https:";
+    const lib = isHttps ? https : http;
 
-function pickRequester(url) {
-  return url.protocol === "https:" ? httpsRequest : httpRequest;
-}
-
-function isConnRefused(err) {
-  const code = err?.code || "";
-  const msg = String(err?.message || "");
-  return code === "ECONNREFUSED" || msg.includes("ECONNREFUSED");
-}
-
-function withHttpFallback(urlStr) {
-  try {
-    const u = new URL(urlStr);
-    if (u.protocol !== "https:") return null;
-    u.protocol = "http:";
-    u.port = ""; // default 80
-    return u.toString();
-  } catch {
-    return null;
-  }
-}
-
-function absolutizeUrl(maybeRelative) {
-  try {
-    if (!maybeRelative) return maybeRelative;
-    const base = getBaseUrl();
-    if (!base) return maybeRelative;
-    return new URL(maybeRelative, base).toString();
-  } catch {
-    return maybeRelative;
-  }
-}
-
-async function requestJsonOnce({ url, method = "GET", headers = {}, body = null, timeoutMs = TIMEOUT_MS }) {
-  const u = new URL(url);
-  const reqFn = pickRequester(u);
-
-  return await new Promise((resolve, reject) => {
-    const req = reqFn(
+    const req = lib.request(
       {
-        protocol: u.protocol,
-        hostname: u.hostname,
-        port: u.port || (u.protocol === "https:" ? 443 : 80),
-        path: u.pathname + u.search,
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
         method,
         headers: {
-          Accept: "application/json",
-          "Accept-Encoding": "identity",
-          Connection: "close",
-          ...(STORAGE_TOKEN ? { "X-Storage-Token": STORAGE_TOKEN } : {}),
+          "Accept": "application/json, text/plain, */*",
+          "Accept-Encoding": "identity", // avoid gzip/chunk mishaps
+          "Connection": "close",         // avoid keep-alive chunk parser issues
           ...headers,
         },
+        timeout: timeoutMs,
+        insecureHTTPParser: true,
       },
       (res) => {
-        let data = "";
-        res.setEncoding("utf8");
-        res.on("data", (chunk) => (data += chunk));
+        const chunks = [];
+        res.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
         res.on("end", () => {
-          try {
-            const parsed = JSON.parse(data || "{}");
-            if (!res.statusCode || res.statusCode >= 400 || parsed.ok === false) {
-              const e = new Error(`chat remote error ${res.statusCode}: ${(data || "").slice(0, 300)}`);
-              // @ts-ignore
-              e.statusCode = res.statusCode;
-              throw e;
-            }
-            resolve(parsed);
-          } catch (e) {
-            // If we threw above, pass through; otherwise parse error
-            // @ts-ignore
-            if (e?.statusCode) return reject(e);
-            reject(new Error(`chat remote parse error: ${String(e)} body=${(data || "").slice(0, 200)}`));
-          }
+          const text = Buffer.concat(chunks).toString("utf-8");
+          resolve({
+            status: res.statusCode || 0,
+            headers: res.headers || {},
+            text,
+          });
         });
       }
     );
 
-    req.on("error", reject);
-    req.setTimeout(timeoutMs, () => req.destroy(new Error("chat remote timeout")));
+    req.on("timeout", () => {
+      req.destroy(new Error(`Remote request timeout after ${timeoutMs}ms`));
+    });
+    req.on("error", (err) => reject(err));
 
-    if (body != null) req.write(body);
+    if (body) req.write(body);
     req.end();
   });
 }
 
-async function requestJson(opts) {
-  // Retry strategy:
-  // - If base URL is https but the hosting only serves http, Node will throw ECONNREFUSED :443.
-  //   In that case, retry once with http://... (same host/path).
+function safeJsonParse(text) {
+  // Some hosts prepend BOM/whitespace or PHP warnings. Try to recover by extracting the first JSON object/array.
+  const trimmed = text.replace(/^\uFEFF/, "").trim();
   try {
-    return await requestJsonOnce(opts);
-  } catch (err) {
-    const fallback = withHttpFallback(opts.url);
-    if (fallback && isConnRefused(err)) {
-      return await requestJsonOnce({ ...opts, url: fallback });
-    }
-    throw err;
+    return JSON.parse(trimmed);
+  } catch (_) {
+    const firstBrace = trimmed.indexOf("{");
+    const firstBracket = trimmed.indexOf("[");
+    const idx = [firstBrace, firstBracket].filter((n) => n >= 0).sort((a,b)=>a-b)[0];
+    if (idx === undefined) throw new Error("Invalid JSON from remote");
+    const candidate = trimmed.slice(idx);
+    return JSON.parse(candidate);
   }
 }
 
-export async function startDm({ userA, userB }) {
-  const base = getBaseUrl();
-  if (!base) return { ok: false, error: "CHAT_REMOTE_URL is not set" };
-
-  return await requestJson({
-    url: `${base}?action=start_dm`,
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ user_a: userA, user_b: userB }),
-  });
+export function getChatRemoteUrl() {
+  const url = process.env.CHAT_REMOTE_URL;
+  if (!url) throw new Error("Missing env CHAT_REMOTE_URL");
+  return url;
 }
 
-export async function listConversations({ user }) {
-  const base = getBaseUrl();
-  if (!base) return { ok: false, error: "CHAT_REMOTE_URL is not set" };
+export async function chatRemoteJson(action, payload, { isUpload=false } = {}) {
+  const baseUrl = getChatRemoteUrl();
+  const token = process.env.STORAGE_TOKEN || "";
+  const timeoutMs = isUpload ? DEFAULT_UPLOAD_TIMEOUT_MS : DEFAULT_TIMEOUT_MS;
 
-  return await requestJson({ url: `${base}?action=conversations&user=${encodeURIComponent(user)}` });
-}
+  const url = new URL(baseUrl);
+  url.searchParams.set("action", action);
 
-export async function listMessages({ conversationId, afterId = 0, limit = 50 }) {
-  const base = getBaseUrl();
-  if (!base) return { ok: false, error: "CHAT_REMOTE_URL is not set" };
+  const body = JSON.stringify(payload ?? {});
+  const headers = {
+    "Content-Type": "application/json; charset=utf-8",
+    "Content-Length": Buffer.byteLength(body).toString(),
+    ...(token ? { "X-Storage-Token": token } : {}),
+  };
 
-  const qs = new URLSearchParams({
-    action: "messages",
-    conversation_id: String(conversationId),
-    after_id: String(afterId),
-    limit: String(limit),
-  });
-
-  const r = await requestJson({ url: `${base}?${qs.toString()}` });
-
-  // Make attachment URLs absolute for the browser
-  if (r?.ok && Array.isArray(r.messages)) {
-    for (const msg of r.messages) {
-      if (Array.isArray(msg.attachments)) {
-        for (const a of msg.attachments) {
-          a.url = absolutizeUrl(a.url);
-        }
-      }
+  const attempt = async (u) => {
+    const resp = await requestText(u.toString(), { method: "POST", headers, body, timeoutMs });
+    if (resp.status >= 400) {
+      throw new Error(`Remote ${action} failed: HTTP ${resp.status} ${resp.text?.slice(0,200) || ""}`);
     }
-  }
-
-  return r;
-}
-
-export async function sendMessage({ conversationId, senderId, body }) {
-  const base = getBaseUrl();
-  if (!base) return { ok: false, error: "CHAT_REMOTE_URL is not set" };
-
-  return await requestJson({
-    url: `${base}?action=send`,
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ conversation_id: conversationId, sender_id: senderId, body }),
-  });
-}
-
-async function uploadOnce({ url, timeoutMs, form }) {
-  const u = new URL(url);
-  const reqFn = pickRequester(u);
-
-  return await new Promise((resolve, reject) => {
-    const req = reqFn(
-      {
-        protocol: u.protocol,
-        hostname: u.hostname,
-        port: u.port || (u.protocol === "https:" ? 443 : 80),
-        path: u.pathname + u.search,
-        method: "POST",
-        headers: {
-          ...form.getHeaders(),
-          Accept: "application/json",
-          "Accept-Encoding": "identity",
-          Connection: "close",
-          ...(STORAGE_TOKEN ? { "X-Storage-Token": STORAGE_TOKEN } : {}),
-        },
-      },
-      (res) => {
-        let data = "";
-        res.setEncoding("utf8");
-        res.on("data", (c) => (data += c));
-        res.on("end", () => {
-          try {
-            const parsed = JSON.parse(data || "{}");
-            if (!res.statusCode || res.statusCode >= 400 || parsed.ok === false) {
-              const e = new Error(`chat remote upload error ${res.statusCode}: ${(data || "").slice(0, 300)}`);
-              // @ts-ignore
-              e.statusCode = res.statusCode;
-              throw e;
-            }
-            resolve(parsed);
-          } catch (e) {
-            // @ts-ignore
-            if (e?.statusCode) return reject(e);
-            reject(new Error(`chat remote upload parse error: ${String(e)} body=${(data || "").slice(0, 200)}`));
-          }
-        });
-      }
-    );
-
-    req.on("error", reject);
-    req.setTimeout(timeoutMs, () => req.destroy(new Error("chat remote upload timeout")));
-
-    form.pipe(req);
-  });
-}
-
-export async function uploadAttachment({ conversationId, senderId, filePath, originalName, mime }) {
-  const base = getBaseUrl();
-  if (!base) return { ok: false, error: "CHAT_REMOTE_URL is not set" };
-
-  const url = `${base}?action=upload`;
-  const form = new FormData();
-  form.append("conversation_id", String(conversationId));
-  form.append("sender_id", String(senderId));
-  form.append("file", fs.createReadStream(filePath), { filename: originalName, contentType: mime });
-
-  const timeoutMs = parseInt(process.env.REMOTE_CHAT_UPLOAD_TIMEOUT_MS || "15000", 10);
+    return safeJsonParse(resp.text || "{}");
+  };
 
   try {
-    const r = await uploadOnce({ url, timeoutMs, form });
-    if (r?.ok && r?.attachment?.url) r.attachment.url = absolutizeUrl(r.attachment.url);
-    return r;
+    return await attempt(url);
   } catch (err) {
-    const fallback = withHttpFallback(url);
-    if (fallback && isConnRefused(err)) {
-      const r = await uploadOnce({ url: fallback, timeoutMs, form });
-      if (r?.ok && r?.attachment?.url) r.attachment.url = absolutizeUrl(r.attachment.url);
-      return r;
+    // Common: ECONNREFUSED to 443 when https isn't actually supported
+    const msg = String(err?.message || err);
+    if (url.protocol === "https:" && (msg.includes("ECONNREFUSED") || msg.includes(":443"))) {
+      const httpUrl = new URL(url.toString());
+      httpUrl.protocol = "http:";
+      return await attempt(httpUrl);
+    }
+    // If this is the chunk-size parse error, it's often a broken chunked response; the insecure parser + identity helps,
+    // but if still failing, surface a clearer hint.
+    if (msg.includes("Invalid character in chunk size") || msg.includes("Parse Error")) {
+      throw new Error(
+        "Remote response is malformed (chunked encoding). " +
+        "Fix by disabling compression / output buffering in chat.php (see provided patch) or serve over plain http."
+      );
     }
     throw err;
   }
