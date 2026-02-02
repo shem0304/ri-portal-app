@@ -13,9 +13,12 @@ import {
   IconButton,
   Alert,
   Autocomplete,
-  LinearProgress,
 } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
+
+// Used to derive "my user id" from the auth token, so we can style messages.
+// (We never display raw UUIDs on the UI.)
+import { getToken } from "../../api.js";
 
 import {
   chatListConversations,
@@ -26,19 +29,57 @@ import {
   chatListUsers,
 } from "../../api/chat.js";
 
-function convTitle(c, userLabelMap) {
-  // Never show raw peer_id (uuid) on the UI.
-  const peerId = String(c?.peer_id || "").trim();
-  const label = peerId ? (userLabelMap.get(peerId) || "") : "";
-  return label || c?.title || `대화 #${c?.id ?? ""}`;
-}
-
 function displayName(u) {
   const org = String(u?.org || "").trim();
   const name = String(u?.name || "").trim();
   const fallback = String(u?.username || u?.email || u?.id || "").trim();
   const base = [org, name].filter(Boolean).join(" ");
   return base || fallback || "(알 수 없음)";
+}
+
+function formatKoreanYMDHM(ts) {
+  // Accepts: "YYYY-MM-DD HH:MM:SS" (MySQL DATETIME) or ISO; returns: "YYYY년 MM월 DD일 HH시 MM분"
+  const s = String(ts || "").trim();
+  if (!s) return "";
+  const iso = s.includes("T") ? s : s.replace(" ", "T");
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mi = String(d.getMinutes()).padStart(2, "0");
+  return `${yyyy}년 ${mm}월 ${dd}일 ${hh}시 ${mi}분`;
+}
+
+function deriveMyUserId() {
+  // Best-effort extraction:
+  // - If token is a UUID/plain id -> treat as user id
+  // - If token looks like JWT -> decode payload and read common fields
+  try {
+    const t = String(getToken?.() || "").trim();
+    if (!t) return "";
+    const parts = t.split(".");
+    if (parts.length === 3) {
+      const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+      const padded = b64.padEnd(Math.ceil(b64.length / 4) * 4, "=");
+      const json = JSON.parse(decodeURIComponent(escape(atob(padded))));
+      return String(json.sub || json.user_id || json.userId || json.id || json.uid || "").trim();
+    }
+    return t;
+  } catch {
+    return "";
+  }
+}
+
+function convLabel(c, userLabelMap) {
+  // Never show raw peer_id (uuid) on the UI.
+  const peerId = String(c?.peer_id || c?.peerId || "").trim();
+  const label = peerId ? String(userLabelMap.get(peerId) || "").trim() : "";
+  const ts = c?.last_at || c?.lastAt || c?.updated_at || c?.updatedAt || c?.created_at || c?.createdAt || "";
+  const when = formatKoreanYMDHM(ts);
+  const base = label || c?.title || "대화";
+  return when ? `${base} ${when}` : base;
 }
 
 export default function Chat() {
@@ -57,8 +98,8 @@ export default function Chat() {
   const fileInputRef = React.useRef(null);
 
   const [uploading, setUploading] = React.useState(false);
-  const [uploadPct, setUploadPct] = React.useState(0);
-  const [uploadName, setUploadName] = React.useState("");
+
+  const myUserId = React.useMemo(() => deriveMyUserId(), []);
 
   const userLabelMap = React.useMemo(() => {
     const m = new Map();
@@ -75,7 +116,6 @@ export default function Chat() {
       setUsers(r.users || []);
       setError("");
     } catch (e) {
-      // Don't block the whole chat UI for this; but surface the error.
       setError(String(e?.message || e));
     }
   }, []);
@@ -114,7 +154,6 @@ export default function Chat() {
   }, [loadUsers, loadConvs]);
 
   React.useEffect(() => {
-    // refresh online status periodically
     if (usersPollRef.current) clearInterval(usersPollRef.current);
     usersPollRef.current = setInterval(() => loadUsers(), 7000);
     return () => {
@@ -124,7 +163,6 @@ export default function Chat() {
   }, [loadUsers]);
 
   React.useEffect(() => {
-    // polling (no websocket)
     if (pollRef.current) clearInterval(pollRef.current);
     if (!activeId) return undefined;
     pollRef.current = setInterval(() => loadMessages(activeId), 3000);
@@ -177,9 +215,7 @@ export default function Chat() {
       if (!file) return;
       if (file.size > 10 * 1024 * 1024) throw new Error("파일은 10MB 이하만 업로드할 수 있습니다.");
       setUploading(true);
-      setUploadPct(0);
-      setUploadName(file.name || "");
-      const r = await chatUpload(activeId, file, { onProgress: (pct) => setUploadPct(pct) });
+      const r = await chatUpload(activeId, file);
       if (!r.ok) throw new Error(r.error || "파일 업로드 실패");
       await loadMessages(activeId, { reset: true });
     } catch (e2) {
@@ -245,10 +281,15 @@ export default function Chat() {
           <Divider />
           <List dense>
             {convs.map((c) => (
-              <ListItemButton key={c.id} selected={activeId === c.id} onClick={() => onSelectConversation(c.id)}>
+              <ListItemButton
+                key={c.id}
+                selected={activeId === c.id}
+                onClick={() => onSelectConversation(c.id)}
+                data-peer-id={String(c?.peer_id || c?.peerId || "")}
+              >
                 <ListItemText
-                  primary={convTitle(c, userLabelMap)}
-                  secondary={c.last_body ? `${c.last_body}` : undefined}
+                  primary={convLabel(c, userLabelMap)}
+                  secondary={c.last_body ? String(c.last_body) : undefined}
                   primaryTypographyProps={{ noWrap: true }}
                   secondaryTypographyProps={{ noWrap: true }}
                 />
@@ -271,19 +312,42 @@ export default function Chat() {
           <Box sx={{ flex: 1, overflow: "auto", p: 1 }}>
             {msgs.map((m) => {
               const senderId = String(m.sender_id || "");
-              const senderLabel = userLabelMap.get(senderId) || senderId;
+              const senderLabel = userLabelMap.get(senderId) || "(알 수 없음)";
+              const isMine = myUserId && senderId && senderId === String(myUserId);
+
+              // 상대방 메시지는 파란색 글자
+              const bodyColor = isMine ? "text.primary" : "primary.main";
+              const metaColor = isMine ? "text.secondary" : "primary.main";
+
               return (
-                <Box key={m.id} sx={{ mb: 1 }}>
-                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                <Box
+                  key={m.id}
+                  sx={{
+                    mb: 1.2,
+                    textAlign: isMine ? "right" : "left",
+                  }}
+                >
+                  <Typography variant="caption" sx={{ color: metaColor }}>
                     {senderLabel} · {m.created_at}
                   </Typography>
-                  {m.body ? <Typography variant="body2">{m.body}</Typography> : null}
+
+                  {m.body ? (
+                    <Typography variant="body2" sx={{ color: bodyColor, whiteSpace: "pre-wrap" }}>
+                      {m.body}
+                    </Typography>
+                  ) : null}
+
                   {Array.isArray(m.attachments) && m.attachments.length ? (
                     <Box sx={{ mt: 0.25 }}>
                       {m.attachments.map((a) => (
-                        <Typography key={a.id} variant="body2">
+                        <Typography key={a.id} variant="body2" sx={{ color: bodyColor }}>
                           📎{" "}
-                          <a href={a.url} target="_blank" rel="noreferrer">
+                          <a
+                            href={a.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            style={{ color: "inherit", textDecoration: "underline" }}
+                          >
                             {a.filename}
                           </a>
                           {a.size ? ` (${Math.round(a.size / 1024)}KB)` : ""}
@@ -302,7 +366,6 @@ export default function Chat() {
           </Box>
 
           <Divider />
-          {uploading ? <LinearProgress variant="determinate" value={uploadPct} /> : null}
           <Stack direction="row" spacing={1} sx={{ p: 1, alignItems: "center" }}>
             <IconButton onClick={() => fileInputRef.current?.click()} disabled={!activeId || uploading}>
               <AttachFileIcon />
@@ -328,7 +391,7 @@ export default function Chat() {
           </Stack>
           {uploading ? (
             <Typography variant="caption" sx={{ px: 1, pb: 1, color: "text.secondary" }} noWrap>
-              첨부 업로드 중… {uploadName ? `${uploadName} · ` : ""}{uploadPct}%
+              첨부 업로드 중…
             </Typography>
           ) : null}
         </Paper>
