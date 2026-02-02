@@ -36,6 +36,52 @@ function isOnline(userId) {
 export function createChatRouter({ getSessionUserId, listUsers } = {}) {
   const router = express.Router();
 
+  // Remote `chat.php` has had multiple schema variants in the wild.
+  // The client expects:
+  // - /conversations -> { ok, conversations: [...] }
+  // - /messages      -> { ok, messages: [...] }
+  // And messages should expose `attachments` (array) when `file_url` exists.
+  function normalizeConversations(resp) {
+    if (!resp || typeof resp !== "object") return resp;
+    if (Array.isArray(resp.conversations)) return resp;
+    if (Array.isArray(resp.items)) {
+      return { ...resp, conversations: resp.items };
+    }
+    return resp;
+  }
+
+  function normalizeMessages(resp) {
+    if (!resp || typeof resp !== "object") return resp;
+    const arr = Array.isArray(resp.messages) ? resp.messages : Array.isArray(resp.items) ? resp.items : null;
+    if (!arr) return resp;
+
+    const messages = arr.map((m) => {
+      const fileUrl = m?.file_url || m?.fileUrl || "";
+      const name = m?.file_name || m?.filename || (fileUrl ? String(fileUrl).split("/").pop() : "");
+      const size = m?.file_size || m?.size;
+
+      // If client expects `attachments`, synthesize from file_url.
+      const attachments = Array.isArray(m?.attachments)
+        ? m.attachments
+        : fileUrl
+          ? [{ id: "file", url: fileUrl, filename: name || "file", size }]
+          : [];
+
+      return {
+        ...m,
+        // Client renders body only; keep aliases.
+        body: m?.body ?? m?.text ?? m?.message ?? "",
+        text: m?.text ?? m?.body ?? "",
+        message: m?.message ?? m?.body ?? "",
+        file_url: fileUrl,
+        fileUrl,
+        attachments,
+      };
+    });
+
+    return { ...resp, messages };
+  }
+
   const upload = multer({
     dest: os.tmpdir(),
     limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
@@ -83,7 +129,7 @@ export function createChatRouter({ getSessionUserId, listUsers } = {}) {
     try {
       const r = await listConversations({ user: userId });
       if (r?.ok === false) return res.status(502).json(r);
-      return res.json(r);
+      return res.json(normalizeConversations(r));
     } catch (e) {
       return res.status(502).json({ ok: false, error: String(e?.message || e) });
     }
@@ -120,7 +166,7 @@ export function createChatRouter({ getSessionUserId, listUsers } = {}) {
     try {
       const r = await listMessages({ conversationId, afterId, limit });
       if (r?.ok === false) return res.status(502).json(r);
-      return res.json(r);
+      return res.json(normalizeMessages(r));
     } catch (e) {
       return res.status(502).json({ ok: false, error: String(e?.message || e) });
     }
@@ -154,15 +200,35 @@ export function createChatRouter({ getSessionUserId, listUsers } = {}) {
     if (!req.file) return res.status(400).json({ ok: false, error: "missing file" });
 
     try {
-      const r = await uploadAttachment({
+      // 1) Upload to remote hosting (returns file_url)
+      const up = await uploadAttachment({
         conversationId,
         senderId: userId,
         filePath: req.file.path,
         originalName: req.file.originalname,
         mime: req.file.mimetype,
       });
-      if (r?.ok === false) return res.status(502).json(r);
-      return res.json(r);
+
+      if (up?.ok === false) return res.status(502).json(up);
+      const fileUrl = up?.file_url || up?.fileUrl || "";
+      if (!fileUrl) {
+        return res.status(502).json({ ok: false, error: "upload_ok_but_missing_file_url" });
+      }
+
+      // 2) Create a chat message that references that file.
+      // The client does not send a separate `/send` call for attachments.
+      const sent = await sendMessage({ conversationId, senderId: userId, body: "", fileUrl });
+      if (sent?.ok === false) return res.status(502).json(sent);
+
+      // Return a normalized payload the client can use immediately.
+      return res.json({
+        ok: true,
+        file_url: fileUrl,
+        fileUrl,
+        name: up?.name || req.file.originalname,
+        size: up?.size || req.file.size,
+        message_id: sent?.id,
+      });
     } catch (e) {
       return res.status(502).json({ ok: false, error: String(e?.message || e) });
     } finally {
