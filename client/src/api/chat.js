@@ -27,25 +27,40 @@ export async function chatListUsers() {
   return apiFetch("/api/chat/users", { auth: true });
 }
 
-export async function chatUpload(conversationId, file) {
+// Upload attachment with progress callback.
+// NOTE: fetch() does not reliably expose upload progress; use XMLHttpRequest.
+export function chatUpload(conversationId, file, { onProgress } = {}) {
   const token = getToken();
-  const form = new FormData();
-  form.append("conversationId", String(conversationId));
-  form.append("file", file);
 
-  const res = await fetch(`${API_BASE}/api/chat/upload`, {
-    method: "POST",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: form,
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append("conversationId", String(conversationId));
+    form.append("file", file);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE}/api/chat/upload`, true);
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+
+    xhr.upload.onprogress = (evt) => {
+      if (!evt.lengthComputable) return;
+      const pct = Math.max(0, Math.min(100, Math.round((evt.loaded / evt.total) * 100)));
+      if (typeof onProgress === "function") onProgress(pct);
+    };
+
+    xhr.onload = () => {
+      try {
+        const text = xhr.responseText || "";
+        const json = text ? JSON.parse(text) : { ok: false, error: "empty_response" };
+        if (xhr.status >= 200 && xhr.status < 300) return resolve(json);
+        return reject(new Error(json?.error || json?.message || `${xhr.status}`));
+      } catch (e) {
+        return reject(new Error(`upload_parse_failed: ${String(e?.message || e)}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("upload_network_error"));
+    xhr.ontimeout = () => reject(new Error("upload_timeout"));
+    xhr.timeout = 30000;
+
+    xhr.send(form);
   });
-
-  if (!res.ok) {
-    let msg = `${res.status}`;
-    try {
-      const j = await res.json();
-      msg = j?.error || j?.message || msg;
-    } catch {}
-    throw new Error(msg);
-  }
-  return res.json();
 }

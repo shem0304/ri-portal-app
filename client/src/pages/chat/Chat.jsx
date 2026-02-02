@@ -13,6 +13,7 @@ import {
   IconButton,
   Alert,
   Autocomplete,
+  LinearProgress,
 } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 
@@ -26,12 +27,10 @@ import {
 } from "../../api/chat.js";
 
 function convTitle(c, userLabelMap) {
-  // Prefer a human-friendly label for DM conversations.
-  // - chat.php may return peer_id (snake) or peerId (camel)
-  // - userLabelMap is built from /api/chat/users and contains "소속 이름" labels.
-  const peerId = String(c?.peer_id || c?.peerId || "").trim();
-  if (peerId) return userLabelMap?.get?.(peerId) || peerId;
-  return c?.title || `대화 #${c?.id ?? ""}`;
+  // Never show raw peer_id (uuid) on the UI.
+  const peerId = String(c?.peer_id || "").trim();
+  const label = peerId ? (userLabelMap.get(peerId) || "") : "";
+  return label || c?.title || `대화 #${c?.id ?? ""}`;
 }
 
 function displayName(u) {
@@ -56,6 +55,10 @@ export default function Chat() {
   const pollRef = React.useRef(null);
   const usersPollRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
+
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadPct, setUploadPct] = React.useState(0);
+  const [uploadName, setUploadName] = React.useState("");
 
   const userLabelMap = React.useMemo(() => {
     const m = new Map();
@@ -173,11 +176,16 @@ export default function Chat() {
       e.target.value = "";
       if (!file) return;
       if (file.size > 10 * 1024 * 1024) throw new Error("파일은 10MB 이하만 업로드할 수 있습니다.");
-      const r = await chatUpload(activeId, file);
+      setUploading(true);
+      setUploadPct(0);
+      setUploadName(file.name || "");
+      const r = await chatUpload(activeId, file, { onProgress: (pct) => setUploadPct(pct) });
       if (!r.ok) throw new Error(r.error || "파일 업로드 실패");
       await loadMessages(activeId, { reset: true });
     } catch (e2) {
       setError(String(e2?.message || e2));
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -223,9 +231,6 @@ export default function Chat() {
                       <Typography variant="body2" noWrap>
                         {displayName(option)}
                       </Typography>
-                      <Typography variant="caption" sx={{ color: "text.secondary" }} noWrap>
-                        {option.id}
-                      </Typography>
                     </Box>
                   </Box>
                 </li>
@@ -243,13 +248,7 @@ export default function Chat() {
               <ListItemButton key={c.id} selected={activeId === c.id} onClick={() => onSelectConversation(c.id)}>
                 <ListItemText
                   primary={convTitle(c, userLabelMap)}
-                  secondary={(() => {
-                    const peerId = String(c?.peer_id || c?.peerId || "").trim();
-                    const parts = [];
-                    if (peerId) parts.push(peerId);
-                    if (c?.last_body) parts.push(String(c.last_body));
-                    return parts.length ? parts.join(" · ") : undefined;
-                  })()}
+                  secondary={c.last_body ? `${c.last_body}` : undefined}
                   primaryTypographyProps={{ noWrap: true }}
                   secondaryTypographyProps={{ noWrap: true }}
                 />
@@ -303,8 +302,9 @@ export default function Chat() {
           </Box>
 
           <Divider />
+          {uploading ? <LinearProgress variant="determinate" value={uploadPct} /> : null}
           <Stack direction="row" spacing={1} sx={{ p: 1, alignItems: "center" }}>
-            <IconButton onClick={() => fileInputRef.current?.click()} disabled={!activeId}>
+            <IconButton onClick={() => fileInputRef.current?.click()} disabled={!activeId || uploading}>
               <AttachFileIcon />
             </IconButton>
             <input ref={fileInputRef} type="file" style={{ display: "none" }} onChange={onPickFile} />
@@ -314,7 +314,7 @@ export default function Chat() {
               value={text}
               onChange={(e) => setText(e.target.value)}
               fullWidth
-              disabled={!activeId}
+              disabled={!activeId || uploading}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
@@ -322,10 +322,15 @@ export default function Chat() {
                 }
               }}
             />
-            <Button variant="contained" onClick={onSend} disabled={!activeId}>
+            <Button variant="contained" onClick={onSend} disabled={!activeId || uploading}>
               전송
             </Button>
           </Stack>
+          {uploading ? (
+            <Typography variant="caption" sx={{ px: 1, pb: 1, color: "text.secondary" }} noWrap>
+              첨부 업로드 중… {uploadName ? `${uploadName} · ` : ""}{uploadPct}%
+            </Typography>
+          ) : null}
         </Paper>
       </Stack>
     </Box>
