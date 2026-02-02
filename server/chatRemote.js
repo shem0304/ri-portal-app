@@ -64,6 +64,18 @@ function requestText(urlStr, { method="GET", headers={}, body=null, timeoutMs=DE
 
     req.on("timeout", () => req.destroy(new Error(`Remote request timeout after ${timeoutMs}ms`)));
     req.on("error", reject);
+
+    // IMPORTANT:
+    // - Strings/Buffers can be written via req.write.
+    // - `form-data` instances are streams. They must be piped, not written.
+    //   Otherwise Node throws:
+    //   "The 'chunk' argument must be of type string or an instance of Buffer... Received an instance of FormData"
+    if (body && typeof body.pipe === "function") {
+      body.on?.("error", reject);
+      body.pipe(req);
+      return;
+    }
+
     if (body) req.write(body);
     req.end();
   });

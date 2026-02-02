@@ -25,9 +25,13 @@ import {
   chatListUsers,
 } from "../../api/chat.js";
 
-function convTitle(c) {
-  // chat.php returns peer_id for dm; fall back gracefully
-  return c?.peer_id || c?.title || `대화 #${c?.id ?? ""}`;
+function convTitle(c, userLabelMap) {
+  // Prefer a human-friendly label for DM conversations.
+  // - chat.php may return peer_id (snake) or peerId (camel)
+  // - userLabelMap is built from /api/chat/users and contains "소속 이름" labels.
+  const peerId = String(c?.peer_id || c?.peerId || "").trim();
+  if (peerId) return userLabelMap?.get?.(peerId) || peerId;
+  return c?.title || `대화 #${c?.id ?? ""}`;
 }
 
 function displayName(u) {
@@ -238,8 +242,14 @@ export default function Chat() {
             {convs.map((c) => (
               <ListItemButton key={c.id} selected={activeId === c.id} onClick={() => onSelectConversation(c.id)}>
                 <ListItemText
-                  primary={convTitle(c)}
-                  secondary={c.last_body ? `${c.last_body}` : undefined}
+                  primary={convTitle(c, userLabelMap)}
+                  secondary={(() => {
+                    const peerId = String(c?.peer_id || c?.peerId || "").trim();
+                    const parts = [];
+                    if (peerId) parts.push(peerId);
+                    if (c?.last_body) parts.push(String(c.last_body));
+                    return parts.length ? parts.join(" · ") : undefined;
+                  })()}
                   primaryTypographyProps={{ noWrap: true }}
                   secondaryTypographyProps={{ noWrap: true }}
                 />
