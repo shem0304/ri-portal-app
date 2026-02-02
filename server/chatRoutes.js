@@ -215,6 +215,25 @@ export function createChatRouter({ getSessionUserId, listUsers } = {}) {
         return res.status(502).json({ ok: false, error: "upload_ok_but_missing_file_url" });
       }
 
+      // Newer chat.php (attachments-enabled) creates the message + chat_attachments row
+      // inside the remote `action=upload` and returns message_id / attachment_id.
+      // If present, DO NOT create a second message here (avoid duplicates).
+      const remoteMessageId = up?.message_id || up?.messageId || 0;
+      const remoteAttachmentId = up?.attachment_id || up?.attachmentId || 0;
+      if (remoteMessageId) {
+        return res.json({
+          ok: true,
+          file_url: fileUrl,
+          fileUrl,
+          name: up?.name || req.file.originalname,
+          size: up?.size || req.file.size,
+          mime: up?.mime || req.file.mimetype,
+          storage_path: up?.storage_path || up?.storagePath,
+          message_id: remoteMessageId,
+          attachment_id: remoteAttachmentId,
+        });
+      }
+
       // 2) Create a chat message that references that file.
       // The client does not send a separate `/send` call for attachments.
       const sent = await sendMessage({ conversationId, senderId: userId, body: "", fileUrl });
