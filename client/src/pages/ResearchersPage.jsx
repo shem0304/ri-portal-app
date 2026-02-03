@@ -55,11 +55,11 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
 
         {(item.institute?.name || (item.institutes || [])[0]) ? (
           <Stack direction='row' spacing={1} sx={{ mt: 0.25, flexWrap: 'wrap' }}>
-            {item.institute?.url ? (
+            {(item.institute?.url || item.instituteUrl) ? (
               <Link
-                key={item.institute.name}
+                key={item.institute?.name || item.instituteName || item.institute}
                 component='a'
-                href={item.institute.url}
+                href={item.institute?.url || item.instituteUrl}
                 target='_blank'
                 rel='noreferrer'
                 underline='hover'
@@ -69,7 +69,7 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
               </Link>
             ) : (
               <Typography variant='body2' color='text.secondary' sx={{ fontSize: 13 }}>
-                {item.institute?.name || (item.institutes || [])[0]}
+                {item.institute?.name || item.instituteName || item.institute || (item.institutes || [])[0]}
               </Typography>
             )}
           </Stack>

@@ -316,10 +316,23 @@ export function searchReports(store, { q = '', scope = 'all', year, institute, l
 // -----------------------------
 function normalizeAuthors(a) {
   if (!a) return [];
-  if (Array.isArray(a)) return a.map(x => String(x || '').trim()).filter(Boolean);
-  const s = String(a || '').trim();
-  if (!s) return [];
-  return s.split(/[;,/|\n]+/g).map(x => String(x || '').trim()).filter(Boolean);
+  let arr = [];
+  if (Array.isArray(a)) arr = a.map(x => String(x || '').trim()).filter(Boolean);
+  else {
+    const s = String(a || '').trim();
+    if (!s) return [];
+    arr = s.split(/[;,/|\n]+/g).map(x => String(x || '').trim()).filter(Boolean);
+  }
+  // De-duplicate within a report to avoid double-counting (case-insensitive)
+  const seen = new Set();
+  const out = [];
+  for (const name of arr) {
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
 }
 
 function tokenizeQuery(store, q) {
@@ -511,6 +524,7 @@ function buildResearcherModel(store, scope = 'all') {
           groups: new Set(),
           scopes: new Set(),
           reportCount: 0,
+          __reportIds: new Set(),
           lastActiveYear: null,
           __kwCounts: new Map(),
           __recentReports: [],
@@ -521,19 +535,23 @@ function buildResearcherModel(store, scope = 'all') {
 
       if (group) o.groups.add(group);
       o.scopes.add(r.scope || 'all');
-      o.reportCount += 1;
-      if (r.year && (!o.lastActiveYear || r.year > o.lastActiveYear)) o.lastActiveYear = r.year;
+      // Count each report at most once per researcher-profile (avoid duplicates & duplicate author listings)
+      if (!o.__reportIds.has(r.id)) {
+        o.__reportIds.add(r.id);
+        o.reportCount += 1;
+        if (r.year && (!o.lastActiveYear || r.year > o.lastActiveYear)) o.lastActiveYear = r.year;
 
-      for (const t of toks) o.__kwCounts.set(t, (o.__kwCounts.get(t) || 0) + 1);
+        for (const t of toks) o.__kwCounts.set(t, (o.__kwCounts.get(t) || 0) + 1);
 
-      o.__recentReports.push({
-        id: r.id,
-        year: r.year,
-        title: r.title,
-        url: r.url,
-        institute: inst,
-        scope: r.scope,
-      });
+        o.__recentReports.push({
+          id: r.id,
+          year: r.year,
+          title: r.title,
+          url: r.url,
+          institute: inst,
+          scope: r.scope,
+        });
+      }
     }
   }
 
@@ -784,6 +802,7 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
       name: r.institute || '',
       url: r.instituteUrl || '',
     },
+    instituteName: r.institute || '',
     reportCount: r.reportCount || 0,
     lastActiveYear: r.lastActiveYear,
     scope: r.scope,
