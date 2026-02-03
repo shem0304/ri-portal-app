@@ -75,19 +75,45 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
 
         {(item.recentReports || []).length ? (
           <Box sx={{ mt: 1.5 }}>
-            <Typography variant='caption' color='text.secondary'>대표/최근 성과</Typography>
-            <Stack spacing={0.5} sx={{ mt: 0.5 }}>
-              {item.recentReports.slice(0, 3).map((r) => (
-                <Box key={r.id}>
-                  <Typography variant='body2' sx={{ fontWeight: 600, display: 'inline' }}>
+            <Stack direction='row' alignItems='center' justifyContent='space-between' sx={{ mb: 0.5 }}>
+              <Typography variant='caption' color='text.secondary'>주요 보고서</Typography>
+              <Typography variant='caption' color='text.secondary'>
+                {(item.recentReports || []).length}건 중 상위 2건
+              </Typography>
+            </Stack>
+
+            <Stack spacing={0.75}>
+              {item.recentReports.slice(0, 2).map((r) => (
+                <Stack key={r.id} direction='row' spacing={1} alignItems='center' justifyContent='space-between'>
+                  <Typography
+                    variant='body2'
+                    sx={{
+                      fontWeight: 650,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      pr: 1,
+                      flex: 1,
+                    }}
+                    title={`${r.year ? `[${r.year}] ` : ''}${r.title}`}
+                  >
                     {r.year ? `[${r.year}] ` : ''}{r.title}
                   </Typography>
-                  {r.url ? (
-                    <Link href={r.url} target='_blank' rel='noreferrer' sx={{ ml: 1, verticalAlign: 'middle' }}>
-                      <OpenInNewIcon fontSize='inherit' />
-                    </Link>
-                  ) : null}
-                </Box>
+
+                  <Button
+                    size='small'
+                    variant='outlined'
+                    endIcon={<OpenInNewIcon fontSize='small' />}
+                    component='a'
+                    href={r.url || '#'}
+                    target='_blank'
+                    rel='noreferrer'
+                    disabled={!r.url}
+                    sx={{ whiteSpace: 'nowrap' }}
+                  >
+                    열기
+                  </Button>
+                </Stack>
               ))}
             </Stack>
           </Box>
