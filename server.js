@@ -1413,6 +1413,210 @@ app.get("/api/reports/search", (req, res) => {
   return res.json({ items, total, limit, offset });
 });
 
+
+// -----------------------------
+// Researchers search (advanced; derived from report authors)
+// -----------------------------
+function buildResearcherProfiles(reports) {
+  const byName = new Map();
+
+  for (const r of reports) {
+    const authorsRaw = Array.isArray(r.authors)
+      ? r.authors
+      : typeof r.authors === "string"
+      ? r.authors.split(/[,;/]/g)
+      : [];
+
+    const inst = instituteName(r) || "-";
+    const y = reportYear(r) || 0;
+    const title = titleText(r) || "";
+    const url = reportUrl(r) || "";
+    const toks = tokenizeTitle(title);
+
+    for (const a of authorsRaw) {
+      const name = normalizeStr(a);
+      if (!name) continue;
+
+      let p = byName.get(name);
+      if (!p) {
+        p = {
+          name,
+          reportCount: 0,
+          lastYear: 0,
+          institutes: new Map(),
+          tokenTf: new Map(),
+          tokenSet: new Set(),
+          recent: [],
+        };
+        byName.set(name, p);
+      }
+
+      p.reportCount += 1;
+      if (y && y > p.lastYear) p.lastYear = y;
+      p.institutes.set(inst, (p.institutes.get(inst) || 0) + 1);
+
+      for (const t of toks) {
+        p.tokenTf.set(t, (p.tokenTf.get(t) || 0) + 1);
+        p.tokenSet.add(t);
+      }
+
+      if (title) {
+        p.recent.push({ year: y || null, title, url, institute: inst });
+      }
+    }
+  }
+
+  // Document frequency: in how many researchers does a token appear?
+  const df = new Map();
+  for (const p of byName.values()) {
+    for (const t of p.tokenSet) df.set(t, (df.get(t) || 0) + 1);
+  }
+  const N = byName.size || 1;
+
+  // Compute TF-IDF weights + norms + top keywords
+  for (const p of byName.values()) {
+    let norm2 = 0;
+    const weights = new Map();
+
+    for (const [t, tf] of p.tokenTf.entries()) {
+      const d = df.get(t) || 0;
+      const idf = Math.log((N + 1) / (d + 1)) + 1;
+      const w = tf * idf;
+      weights.set(t, w);
+      norm2 += w * w;
+    }
+
+    p.weights = weights;
+    p.norm = Math.sqrt(norm2) || 1;
+
+    p.keywords = [...weights.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 12)
+      .map(([k]) => k);
+
+    p.mainInstitute =
+      [...p.institutes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "-";
+
+    // Keep recent outputs (up to 5)
+    p.recent = p.recent
+      .sort((a, b) => (b.year || 0) - (a.year || 0))
+      .slice(0, 5);
+
+    // Drop heavy temp fields
+    delete p.tokenSet;
+    delete p.tokenTf;
+  }
+
+  return { byName, df, N };
+}
+
+function scoreResearcher(profile, queryTokens) {
+  if (!queryTokens.length) return { similarity: 0, coverage: 0, matched: [] };
+
+  // Treat query tokens as unit weights; dot = sum of profile weights on query tokens.
+  let dot = 0;
+  const matched = [];
+  for (const t of queryTokens) {
+    const w = profile.weights.get(t);
+    if (w) {
+      dot += w;
+      matched.push(t);
+    }
+  }
+
+  const qNorm = Math.sqrt(queryTokens.length) || 1;
+  const sim = dot / (profile.norm * qNorm);
+  const coverage = matched.length / queryTokens.length;
+  return { similarity: sim, coverage, matched };
+}
+
+app.get("/api/researchers/search", (req, res) => {
+  const scope = normalizeStr(req.query.scope) || "all";
+  const institute = normalizeStr(req.query.institute);
+  const q = normalizeStr(req.query.q);
+  const sort = normalizeStr(req.query.sort) || "relevance";
+  const limit = Math.min(200, Math.max(1, safeInt(req.query.limit, 50)));
+  const offset = Math.max(0, safeInt(req.query.offset, 0));
+
+  // Base for profiles: scope + institute filter only (q shouldn't filter the corpus).
+  const base = getReportsByScope(scope);
+  const corpus = filterReports(base, { institute, year: undefined, q: undefined });
+
+  const cacheKey = `researchers:index:${scope}:${institute || "-"}`;
+  let index = cacheGet(cacheKey);
+  if (!index) index = cacheSet(cacheKey, buildResearcherProfiles(corpus));
+
+  const queryTokens = tokenizeTitle(q || "");
+  const nowYear = new Date().getFullYear();
+
+  const scored = [];
+  for (const p of index.byName.values()) {
+    const s = scoreResearcher(p, queryTokens);
+
+    // Signals
+    const recency = p.lastYear ? Math.max(0, Math.min(1, (p.lastYear - (nowYear - 10)) / 10)) : 0;
+    const volume = Math.max(0, Math.min(1, Math.log(1 + p.reportCount) / Math.log(1 + 50)));
+
+    // Hybrid score (simple but effective)
+    let score;
+    if (!q) {
+      // When no query, recommend by activity+outputs
+      score = volume * 0.6 + recency * 0.4;
+    } else {
+      score = s.similarity * 0.65 + s.coverage * 0.15 + recency * 0.10 + volume * 0.10;
+    }
+
+    scored.push({
+      id: p.name,
+      name: p.name,
+      institute: p.mainInstitute,
+      keywords: (p.keywords || []).slice(0, 8),
+      reportCount: p.reportCount,
+      lastYear: p.lastYear || null,
+      recent: (p.recent || []).slice(0, 3),
+      match: q
+        ? {
+            confidence: Math.round(Math.max(0, Math.min(1, score)) * 100),
+            similarity: s.similarity,
+            coverage: s.coverage,
+            matchedKeywords: s.matched.slice(0, 8),
+            reasons: [
+              s.matched.length ? "전문분야 유사도" : "일반 추천",
+              p.lastYear ? "최근 활동" : null,
+              p.reportCount >= 5 ? "성과 다수" : null,
+            ].filter(Boolean),
+          }
+        : null,
+      _score: score,
+    });
+  }
+
+  // Sorting
+  const sorter = (a, b) => b._score - a._score;
+  scored.sort(sorter);
+
+  // Optional sort override
+  if (sort === "recent") scored.sort((a, b) => (b.lastYear || 0) - (a.lastYear || 0) || sorter(a, b));
+  if (sort === "outputs") scored.sort((a, b) => (b.reportCount || 0) - (a.reportCount || 0) || sorter(a, b));
+
+  const total = scored.length;
+  const page = scored.slice(offset, offset + limit).map(({ _score, ...rest }) => rest);
+
+  const suggestedKeywords = q
+    ? [...new Set(page.flatMap((i) => i.keywords || []))].slice(0, 15)
+    : [];
+
+  return res.json({
+    items: page,
+    total,
+    limit,
+    offset,
+    queryAnalysis: { tokens: queryTokens, suggestedKeywords },
+  });
+});
+
+
+
 // -----------------------------
 // Trends
 // -----------------------------
@@ -1779,7 +1983,11 @@ app.get("/health", (req, res) => res.status(200).send("ok"));
 app.use(express.static(CLIENT_DIST));
 
 // SPA fallback
+// - Prevent `/api/*` from being rewritten to index.html (otherwise the client will try to parse HTML as JSON).
 app.get("*", (req, res) => {
+  if (req.path.startsWith("/api")) {
+    return res.status(404).json({ message: "Not Found" });
+  }
   const indexPath = path.join(CLIENT_DIST, "index.html");
   if (!fs.existsSync(indexPath)) {
     return res.status(503).send("Client build not found. Did you run the client build on deploy?");

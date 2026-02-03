@@ -7,7 +7,6 @@ const InstitutesPage = lazy(() => import('./pages/InstitutesPage.jsx'));
 const LoginPage = lazy(() => import('./pages/LoginPage.jsx'));
 const RegisterPage = lazy(() => import('./pages/RegisterPage.jsx'));
 const ReportsPage = lazy(() => import('./pages/ReportsPage.jsx'));
-const ResearchersPage = lazy(() => import('./pages/ResearchersPage.jsx'));
 const AdminUsersPage = lazy(() => import('./pages/AdminUsersPage.jsx'));
 const AdminStopwordsPage = lazy(() => import('./pages/AdminStopwordsPage.jsx'));
 const TrendsIndex = lazy(() => import('./pages/trends/TrendsIndex.jsx'));
@@ -22,7 +21,6 @@ export default function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
-          <Route path="/researchers" element={<ResearchersPage />} />
           <Route path="/admin/users" element={<ProtectedRoute><AdminUsersPage /></ProtectedRoute>} />
           <Route path="/admin/stopwords" element={<ProtectedRoute><AdminStopwordsPage /></ProtectedRoute>} />
           <Route path="/trends/*" element={<TrendsIndex />} />

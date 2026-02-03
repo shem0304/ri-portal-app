@@ -28,7 +28,6 @@ import {
   getWordCloud,
   getBurstKeywords,
   searchReports,
-  searchResearchers,
   buildCooccurrenceNetwork,
   instituteKeywordHeatmap,
   relatedReportsByKeyword,
@@ -142,12 +141,6 @@ app.get('/api/press/latest', async (req, res) => {
   res.json(data);
 });
 
-// --- Researchers (public; derived from report authors)
-app.get('/api/researchers/search', (req, res) => {
-  const { q, scope, institute, sort, limit, offset } = req.query;
-  res.json(searchResearchers(store, { q, scope, institute, sort, limit, offset }));
-});
-
 // --- Protected reports
 app.get('/api/reports/search', requireAuth, (req, res) => {
   const { q, scope, year, institute, limit, offset } = req.query;
@@ -158,12 +151,22 @@ app.get('/api/reports/search', requireAuth, (req, res) => {
 const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
 if (fs.existsSync(clientDist)) {
   app.use(express.static(clientDist));
-  app.use((req, res) => {
+
+  // SPA fallback: for non-API routes, return index.html so refresh/deep-link works on Render.
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) return next();
+    const indexPath = path.join(clientDist, 'index.html');
+    return res.sendFile(indexPath);
+  });
+
+  // API 404 (prevents returning index.html for unknown /api paths)
+  app.use('/api', (req, res) => {
     res.status(404).json({ message: 'Not Found' });
   });
 } else {
   console.log('[RI Portal] client/dist not found. Run the client dev server (npm run dev) for the UI.');
 }
+
 
 app.listen(PORT, () => {
   console.log(`RI Portal server listening on http://localhost:${PORT}`);
