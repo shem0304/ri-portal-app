@@ -458,20 +458,28 @@ function focusScoreFromCounts(kwCounts) {
 
 function buildResearcherModel(store, scope = 'all') {
   const s = normalizeScope(scope);
-  const cacheKey = `researchersModel:${s}`;
+  const cacheKey = `researchersModel:${s}:byInstitute`;
   const cached = store.cache.get(cacheKey);
   if (cached) return cached;
 
   const rows = selectReportsByScope(store, s);
-  const byName = new Map(); // lower(name) -> obj
-  const collaborators = new Map(); // key -> Set(collaboratorKey)
+
+  // Collaboration signal is still computed at the "person(name)" level so it works across institutes.
+  const collaborators = new Map(); // nameKey -> Set(nameKey)
+
+  // Key idea: build *profiles* per (name, institute) so same-name researchers in different institutes
+  // appear as distinct candidates with their own report counts/titles.
+  const byProfile = new Map(); // profileKey -> obj
 
   for (const r of rows) {
     const authors = normalizeAuthors(r.authors || r.author || r.writers || r.writer);
     if (!authors.length) continue;
 
-    // Build co-author sets (collaboration signal)
-    const authorKeys = authors.map(a => String(a || '').trim()).filter(Boolean).map(a => a.toLowerCase());
+    // Co-author network (name-level)
+    const authorKeys = authors
+      .map(a => String(a || '').trim())
+      .filter(Boolean)
+      .map(a => a.toLowerCase());
     for (let i = 0; i < authorKeys.length; i++) {
       for (let j = 0; j < authorKeys.length; j++) {
         if (i === j) continue;
@@ -489,25 +497,28 @@ function buildResearcherModel(store, scope = 'all') {
     for (const nameRaw of authors) {
       const name = String(nameRaw || '').trim();
       if (!name) continue;
-      const key = name.toLowerCase();
 
-      let o = byName.get(key);
+      const nameKey = name.toLowerCase();
+      const profileKey = `${nameKey}||${inst}`;
+
+      let o = byProfile.get(profileKey);
       if (!o) {
         o = {
-          id: key,
+          id: profileKey,
           name,
-          institutes: new Set(),
+          nameKey,
+          institute: inst,
           groups: new Set(),
           scopes: new Set(),
           reportCount: 0,
           lastActiveYear: null,
           __kwCounts: new Map(),
           __recentReports: [],
+          __coauthorDegree: 0,
         };
-        byName.set(key, o);
+        byProfile.set(profileKey, o);
       }
 
-      o.institutes.add(inst);
       if (group) o.groups.add(group);
       o.scopes.add(r.scope || 'all');
       o.reportCount += 1;
@@ -526,21 +537,20 @@ function buildResearcherModel(store, scope = 'all') {
     }
   }
 
-  // Base researchers list
+  // Convert to list + attach collaboration degree (name-level)
   const rawResearchers = [];
-  for (const o of byName.values()) {
-    const instList = Array.from(o.institutes.values()).filter(Boolean).sort();
+  for (const o of byProfile.values()) {
     o.__recentReports.sort((a, b) => (b.year || 0) - (a.year || 0));
     const recentReports = o.__recentReports.slice(0, 5);
 
     const scopeLabel = (o.scopes.size === 1) ? Array.from(o.scopes)[0] : 'all';
-    const collabSet = collaborators.get(o.id) || new Set();
+    const collabSet = collaborators.get(o.nameKey) || new Set();
     const coauthorDegree = collabSet.size;
 
     rawResearchers.push({
       id: o.id,
       name: o.name,
-      institutes: instList,
+      institute: o.institute,
       groups: Array.from(o.groups.values()),
       scope: scopeLabel,
       reportCount: o.reportCount,
@@ -552,13 +562,14 @@ function buildResearcherModel(store, scope = 'all') {
     });
   }
 
-  // TF-IDF model
+  // TF-IDF model over profiles
   const { idf, N } = computeIdfFromResearchers(rawResearchers);
 
   const researchers = rawResearchers.map(r => {
     const { vec, norm, top } = buildTfIdfVector(r.__kwCounts, idf, 240);
     const keywords = top.slice(0, 16);
-    const searchText = `${r.name} ${r.institutes.join(' ')} ${keywords.join(' ')} ${r.recentReports.slice(0, 5).map(x => x.title).join(' ')}`.toLowerCase();
+
+    const searchText = `${r.name} ${r.institute} ${keywords.join(' ')} ${r.recentReports.slice(0, 5).map(x => x.title).join(' ')}`.toLowerCase();
     return {
       ...r,
       keywords,
@@ -573,7 +584,7 @@ function buildResearcherModel(store, scope = 'all') {
   return model;
 }
 
-function buildQueryVector(tokens, idf) {
+function buildQueryVector(tokens, idf) {(tokens, idf) {
   const counts = new Map();
   for (const t of tokens) counts.set(t, (counts.get(t) || 0) + 1);
   const vec = new Map();
@@ -587,6 +598,24 @@ function buildQueryVector(tokens, idf) {
   }
   const norm = Math.sqrt(norm2) || 1;
   return { vec, norm };
+}
+
+
+function getInstituteUrlByNameMap(store) {
+  if (store.__instUrlByName && store.__instUrlByName instanceof Map) return store.__instUrlByName;
+  const m = new Map();
+  try {
+    for (const it of (store.localInstitutes || [])) {
+      if (it?.name && it?.url) m.set(it.name, it.url);
+    }
+    for (const it of (store.nationalInstitutes || [])) {
+      if (it?.name && it?.url) m.set(it.name, it.url);
+    }
+  } catch (e) {
+    // ignore
+  }
+  store.__instUrlByName = m;
+  return m;
 }
 
 function normalize0to1(x, lo, hi) {
@@ -606,7 +635,11 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
 
   // Facets (scope-level)
   const instCounts = new Map();
-  for (const it of rows) for (const n of it.institutes || []) instCounts.set(n, (instCounts.get(n) || 0) + 1);
+  for (const it of rows) {
+    const n = String(it.institute || '').trim();
+    if (!n) continue;
+    instCounts.set(n, (instCounts.get(n) || 0) + 1);
+  }
   const facets = {
     institutes: Array.from(instCounts.entries())
       .map(([name, count]) => ({ name, count }))
@@ -619,8 +652,20 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
     const upper = inst.toUpperCase();
     const group = (upper === 'NRC') ? 'nrc' : (upper === 'NCT' || upper === 'NST') ? 'nst' : null;
     if (group) rows = rows.filter(r => (r.groups || []).includes(group));
-    else rows = rows.filter(r => (r.institutes || []).includes(inst));
+    else rows = rows.filter(r => r.institute === inst);
   }
+
+
+  const instUrlByName = getInstituteUrlByNameMap(store);
+
+  // Attach institute homepage url (if available) for hyperlinking in UI.
+  rows = rows.map((r) => {
+    const name = String(r.institute || '').trim();
+    return {
+      ...r,
+      instituteUrl: name ? (instUrlByName.get(name) || '') : '',
+    };
+  });
 
   // Query analysis (supports sentence-style input)
   const qRaw = String(q || '').trim();
@@ -647,7 +692,7 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
     const coverage = tokensForCoverage.length ? (covered / tokensForCoverage.length) : 0;
 
     // Signals
-    const productivity = Math.log(1 + (r.reportCount || 0)); // ~0..?
+    const productivity = Math.log(1 + (r.reportCount ?? 0)); // ~0..?
     const recency = r.lastActiveYear ? (r.lastActiveYear - 2000) : 0;
     const collab = Math.log(1 + (r.__coauthorDegree || 0));
     const focus = r.__focus ?? 0.5;
@@ -684,7 +729,7 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
     if (nameBoost >= 1.6) reasons.push('이름 매칭');
     if (sim >= 0.25) reasons.push('전문분야 유사도 높음');
     if (coverage >= 0.5 && tokensForCoverage.length) reasons.push('질의 키워드 커버리지 높음');
-    if ((r.reportCount || 0) >= 5) reasons.push('성과(보고서) 다수');
+    if (((r.reportCount ?? 0)) >= 5) reasons.push('성과(보고서) 다수');
     if (r.lastActiveYear && r.lastActiveYear >= 2022) reasons.push('최근 활동');
 
     // Confidence: 0..1 (relative)
@@ -735,8 +780,11 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
   const items = scored.slice(off, off + lim).map(r => ({
     id: r.id,
     name: r.name,
-    institutes: r.institutes,
-    reportCount: r.reportCount,
+    institute: {
+      name: r.institute || '',
+      url: r.instituteUrl || '',
+    },
+    reportCount: r.reportCount || 0,
     lastActiveYear: r.lastActiveYear,
     scope: r.scope,
     keywords: r.keywords,

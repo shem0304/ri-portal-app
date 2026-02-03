@@ -53,31 +53,25 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
           </Box>
         ) : null}
 
-        {((item.instituteLinks || item.institutes || []).length) ? (
+        {(item.institute?.name || (item.institutes || [])[0]) ? (
           <Stack direction='row' spacing={1} sx={{ mt: 0.25, flexWrap: 'wrap' }}>
-            {(item.instituteLinks && item.instituteLinks.length ? item.instituteLinks : (item.institutes || []).map((name) => ({ name, url: null })))
-              .slice(0, 3)
-              .map((inst) => {
-                const name = inst?.name || inst;
-                const url = inst?.url || null;
-                return url ? (
-                  <Link
-                    key={name}
-                    component='a'
-                    href={url}
-                    target='_blank'
-                    rel='noreferrer'
-                    underline='hover'
-                    sx={{ fontSize: 13, color: 'text.secondary' }}
-                  >
-                    {name}
-                  </Link>
-                ) : (
-                  <Typography key={name} variant='body2' color='text.secondary' sx={{ fontSize: 13 }}>
-                    {name}
-                  </Typography>
-                );
-              })}
+            {item.institute?.url ? (
+              <Link
+                key={item.institute.name}
+                component='a'
+                href={item.institute.url}
+                target='_blank'
+                rel='noreferrer'
+                underline='hover'
+                sx={{ fontSize: 13, color: 'text.secondary' }}
+              >
+                {item.institute.name}
+              </Link>
+            ) : (
+              <Typography variant='body2' color='text.secondary' sx={{ fontSize: 13 }}>
+                {item.institute?.name || (item.institutes || [])[0]}
+              </Typography>
+            )}
           </Stack>
         ) : (
           <Typography variant='body2' color='text.secondary'>소속 정보 없음</Typography>
@@ -104,8 +98,10 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
 
         <Stack direction='row' spacing={1} sx={{ mt: 1.25, flexWrap: 'wrap' }}>
           <Chip size='small' variant='outlined' label={`보고서 ${item.reportCount || 0}건`} />
-          {item.scope ? (
-            <Chip size='small' variant='outlined' label={item.scope === 'local' ? '지자체' : item.scope === 'national' ? '정부출연' : '전체'} />
+          {item.scope === 'local' ? (
+            <Chip size='small' variant='outlined' label='지자체' />
+          ) : item.scope === 'national' ? (
+            <Chip size='small' variant='outlined' label='정부출연' />
           ) : null}
         </Stack>
 
