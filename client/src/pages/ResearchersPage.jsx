@@ -5,6 +5,7 @@ import {
   Pagination, Select, Stack, TextField, Tooltip, Typography
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { apiFetch } from '../api';
 
@@ -52,29 +53,9 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
           </Box>
         ) : null}
 
-        {(item.institute?.name || (item.institutes || [])[0]) ? (
-          <Stack direction='row' spacing={1} sx={{ mt: 0.25, flexWrap: 'wrap' }}>
-            {(item.institute?.url || item.instituteUrl) ? (
-              <Link
-                key={item.institute?.name || item.instituteName || item.institute}
-                component='a'
-                href={item.institute?.url || item.instituteUrl}
-                target='_blank'
-                rel='noreferrer'
-                underline='hover'
-                sx={{ fontSize: 13, color: 'text.secondary' }}
-              >
-                {item.institute.name}
-              </Link>
-            ) : (
-              <Typography variant='body2' color='text.secondary' sx={{ fontSize: 13 }}>
-                {item.institute?.name || item.instituteName || item.institute || (item.institutes || [])[0]}
-              </Typography>
-            )}
-          </Stack>
-        ) : (
-          <Typography variant='body2' color='text.secondary'>소속 정보 없음</Typography>
-        )}
+        <Typography variant='body2' color='text.secondary'>
+          {(item.institutes || []).slice(0, 2).join(' · ') || '소속 정보 없음'}
+        </Typography>
 
         {(matchedKeywords || []).length ? (
           <Stack direction='row' spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
@@ -96,40 +77,84 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
         ) : null}
 
         <Stack direction='row' spacing={1} sx={{ mt: 1.25, flexWrap: 'wrap' }}>
-          <Chip size='small' variant='outlined' label={`보고서 ${item.reportCount || 0}건`} />
-          <Button
+          <Chip
             size='small'
             variant='outlined'
-            href={buildReportsLink({ name: item.name, institute: (item.institute?.name || item.instituteName || ''), scope: item.scope })}
-          >
-            보고서 보기
-          </Button>
-          {item.scope === 'local' ? (
-            <Chip size='small' variant='outlined' label='지자체' />
-          ) : item.scope === 'national' ? (
-            <Chip size='small' variant='outlined' label='정부출연' />
+            clickable
+            component='a'
+            href={`https://ri-portal-app.onrender.com/reports?q=${encodeURIComponent(item.name || '')}`}
+            sx={{ cursor: 'pointer' }}
+            label={`보고서 ${item.reportCount || 0}건`}
+          />
+          {item.scope && item.scope !== 'all' ? (
+            <Chip size='small' variant='outlined' label={item.scope === 'local' ? '지자체' : '정부출연'} />
           ) : null}
         </Stack>
+
+        {(() => {
+          const raw = Array.isArray(item.recentReports) ? item.recentReports : [];
+          const uniq = [];
+          const seen = new Set();
+          for (const r of raw) {
+            const k = String(r?.id || r?.title || '').trim();
+            if (!k || seen.has(k)) continue;
+            seen.add(k);
+            uniq.push(r);
+            if (uniq.length >= 3) break;
+          }
+          return uniq.length ? (
+          <Box sx={{ mt: 1.5 }}>
+            <Stack direction='row' alignItems='center' justifyContent='space-between' sx={{ mb: 0.5 }}>
+              <Typography variant='caption' color='text.secondary'>연구보고서 (최근 3건)</Typography>
+            </Stack>
+
+            <Stack spacing={0.75}>
+              {uniq.map((r) => (
+                <Stack key={r.id} direction='row' spacing={1} alignItems='center' justifyContent='space-between'>
+                  <Typography
+                    variant='body2'
+                    sx={{
+                      fontWeight: 650,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      pr: 1,
+                      flex: 1,
+                    }}
+                    title={`${r.year ? `[${r.year}] ` : ''}${r.title}`}
+                  >
+                    {r.year ? `[${r.year}] ` : ''}{r.title}
+                  </Typography>
+
+                  <Button
+                    size='small'
+                    variant='outlined'
+                    endIcon={<OpenInNewIcon fontSize='small' />}
+                    component='a'
+                    href={r.url || '#'}
+                    target='_blank'
+                    rel='noreferrer'
+                    disabled={!r.url}
+                    sx={{ whiteSpace: 'nowrap' }}
+                  >
+                    열기
+                  </Button>
+                </Stack>
+              ))}
+            </Stack>
+          </Box>
+          ) : null;
+        })()}
       </CardContent>
     </Card>
   );
-}
-
-
-function buildReportsLink({ name, institute, scope }) {
-  const params = new URLSearchParams();
-  if (name) params.set('q', name);
-  if (institute) params.set('institute', institute);
-  if (scope && scope !== 'all') params.set('scope', scope);
-  return `/reports?${params.toString()}`;
 }
 
 export default function ResearchersPage() {
   const [q, setQ] = React.useState('');
   const [scope, setScope] = React.useState('all');
   const [institute, setInstitute] = React.useState('');
-  // Default to AI match ordering (highest -> lowest)
-  const [sort, setSort] = React.useState('match');
+  const [sort, setSort] = React.useState('relevance');
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
   const [meta, setMeta] = React.useState({ total: 0, limit: 24, offset: 0 });
@@ -153,19 +178,7 @@ export default function ResearchersPage() {
     setError('');
     try {
       const res = await apiFetch(`/api/researchers/search?${params.toString()}`);
-      // Always sort by AI match descending on the client as a safety net,
-      // even if the server-side sort is not applied in some environments.
-      const rawItems = Array.isArray(res.items) ? res.items : [];
-      const sortedItems = rawItems.slice().sort((a, b) => {
-        const ac = normalizeConfidenceToPct(a?.match?.confidence) ?? -1;
-        const bc = normalizeConfidenceToPct(b?.match?.confidence) ?? -1;
-        if (bc !== ac) return bc - ac;
-        const as = Number(a?.match?.similarity ?? 0);
-        const bs = Number(b?.match?.similarity ?? 0);
-        if (bs !== as) return bs - as;
-        return String(a?.name || '').localeCompare(String(b?.name || ''));
-      });
-      setItems(sortedItems);
+      setItems(res.items || []);
       setMeta({ total: res.total || 0, limit: res.limit || meta.limit, offset: res.offset || 0 });
       const opts = (res.facets?.institutes || []).map((d) => d.name).filter(Boolean);
       setInstOptions(opts.slice(0, 300));
@@ -210,7 +223,6 @@ export default function ResearchersPage() {
             </Select>
 
             <Select value={sort} onChange={(e) => setSort(e.target.value)} sx={{ minWidth: 160 }}>
-              <MenuItem value='match'>AI 매칭(높은순)</MenuItem>
               <MenuItem value='relevance'>관련도</MenuItem>
               <MenuItem value='recent'>최신</MenuItem>
               <MenuItem value='outputs'>성과(보고서 수)</MenuItem>

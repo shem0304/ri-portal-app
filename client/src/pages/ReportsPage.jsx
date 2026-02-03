@@ -4,6 +4,7 @@ import {
   Stack, TextField, Typography, Link
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { useLocation } from 'react-router-dom';
 import { apiFetch } from '../api';
 
 function ReportCard({ item }) {
@@ -28,6 +29,7 @@ function ReportCard({ item }) {
 }
 
 export default function ReportsPage() {
+  const location = useLocation();
   const [q, setQ] = React.useState('');
   const [scope, setScope] = React.useState('all');
   const [year, setYear] = React.useState('');
@@ -40,6 +42,10 @@ export default function ReportsPage() {
   const [yearOptions, setYearOptions] = React.useState([]);
   const page = Math.floor(meta.offset / meta.limit) + 1;
   const totalPages = Math.max(1, Math.ceil(meta.total / meta.limit));
+
+  // Hydrate filters from URL query params (e.g., /reports?q=<researcher name>)
+  // so deep links from the Researcher page automatically run.
+  const hydratedFromUrlRef = React.useRef(false);
 
   // Keep filter option lists in sync with the selected scope.
   // - all: local + national
@@ -78,12 +84,17 @@ export default function ReportsPage() {
     })();
   }, [scope]);
 
-  async function load({ offset = 0 } = {}) {
+  async function load({ offset = 0, qOverride, scopeOverride, yearOverride, instituteOverride } = {}) {
+    const qVal = (qOverride !== undefined) ? qOverride : q;
+    const scopeVal = (scopeOverride !== undefined) ? scopeOverride : scope;
+    const yearVal = (yearOverride !== undefined) ? yearOverride : year;
+    const instituteVal = (instituteOverride !== undefined) ? instituteOverride : institute;
+
     const params = new URLSearchParams();
-    if (q.trim()) params.set('q', q.trim());
-    if (scope !== 'all') params.set('scope', scope);
-    if (year) params.set('year', year);
-    if (institute) params.set('institute', institute);
+    if (String(qVal || '').trim()) params.set('q', String(qVal || '').trim());
+    if ((scopeVal || 'all') !== 'all') params.set('scope', scopeVal);
+    if (yearVal) params.set('year', yearVal);
+    if (instituteVal) params.set('institute', instituteVal);
     params.set('limit', String(meta.limit));
     params.set('offset', String(offset));
 
@@ -101,9 +112,30 @@ export default function ReportsPage() {
   }
 
   React.useEffect(() => {
+    // If a deep-link query param exists, let the URL-hydration effect trigger the first load
+    // to avoid an initial unfiltered flash.
+    const sp = new URLSearchParams(location.search || '');
+    const qp = sp.get('q') || '';
+    if (!hydratedFromUrlRef.current && qp) return;
+
     load({ offset: 0 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scope, year, institute]);
+
+  React.useEffect(() => {
+    if (hydratedFromUrlRef.current) return;
+    const sp = new URLSearchParams(location.search || '');
+    const qp = sp.get('q') || '';
+    if (qp) {
+      hydratedFromUrlRef.current = true;
+      setQ(qp);
+      // Trigger a search with the URL value immediately.
+      load({ offset: 0, qOverride: qp });
+    } else {
+      hydratedFromUrlRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   return (
     <Box>

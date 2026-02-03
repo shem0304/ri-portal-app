@@ -55,6 +55,16 @@ function applyNeedleFilter(store, rows, needle) {
   return rows.filter(r => {
     const t = String(r.title || '').toLowerCase();
     if (t.includes(n)) return true;
+
+     // Also match against authors so deep links like /reports?q=<researcher name>
+     // reliably show the researcher's reports.
+     const a = r.authors;
+     if (Array.isArray(a)) {
+       if (a.some(x => String(x || '').toLowerCase().includes(n))) return true;
+     } else if (a) {
+       if (String(a || '').toLowerCase().includes(n)) return true;
+     }
+
     const toks = store.tokensById.get(r.id) || [];
     return toks.some(tok => tok.includes(n));
   });
@@ -316,23 +326,10 @@ export function searchReports(store, { q = '', scope = 'all', year, institute, l
 // -----------------------------
 function normalizeAuthors(a) {
   if (!a) return [];
-  let arr = [];
-  if (Array.isArray(a)) arr = a.map(x => String(x || '').trim()).filter(Boolean);
-  else {
-    const s = String(a || '').trim();
-    if (!s) return [];
-    arr = s.split(/[;,/|\n]+/g).map(x => String(x || '').trim()).filter(Boolean);
-  }
-  // De-duplicate within a report to avoid double-counting (case-insensitive)
-  const seen = new Set();
-  const out = [];
-  for (const name of arr) {
-    const key = name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(name);
-  }
-  return out;
+  if (Array.isArray(a)) return a.map(x => String(x || '').trim()).filter(Boolean);
+  const s = String(a || '').trim();
+  if (!s) return [];
+  return s.split(/[;,/|\n]+/g).map(x => String(x || '').trim()).filter(Boolean);
 }
 
 function tokenizeQuery(store, q) {
@@ -471,28 +468,30 @@ function focusScoreFromCounts(kwCounts) {
 
 function buildResearcherModel(store, scope = 'all') {
   const s = normalizeScope(scope);
-  const cacheKey = `researchersModel:${s}:byInstitute`;
+  const cacheKey = `researchersModel:${s}`;
   const cached = store.cache.get(cacheKey);
   if (cached) return cached;
 
   const rows = selectReportsByScope(store, s);
-
-  // Collaboration signal is still computed at the "person(name)" level so it works across institutes.
-  const collaborators = new Map(); // nameKey -> Set(nameKey)
-
-  // Key idea: build *profiles* per (name, institute) so same-name researchers in different institutes
-  // appear as distinct candidates with their own report counts/titles.
-  const byProfile = new Map(); // profileKey -> obj
+  const byName = new Map(); // lower(name) -> obj
+  const collaborators = new Map(); // key -> Set(collaboratorKey)
 
   for (const r of rows) {
-    const authors = normalizeAuthors(r.authors || r.author || r.writers || r.writer);
+    // Deduplicate author strings per-report so we don't over-count the same report
+    // when the underlying data repeats names.
+    const authorsRaw = normalizeAuthors(r.authors || r.author || r.writers || r.writer);
+    const authorMap = new Map();
+    for (const aRaw of authorsRaw) {
+      const aTrim = String(aRaw || '').trim();
+      if (!aTrim) continue;
+      const lc = aTrim.toLowerCase();
+      if (!authorMap.has(lc)) authorMap.set(lc, aTrim);
+    }
+    const authors = Array.from(authorMap.values());
     if (!authors.length) continue;
 
-    // Co-author network (name-level)
-    const authorKeys = authors
-      .map(a => String(a || '').trim())
-      .filter(Boolean)
-      .map(a => a.toLowerCase());
+    // Build co-author sets (collaboration signal)
+    const authorKeys = authors.map(a => String(a || '').trim()).filter(Boolean).map(a => a.toLowerCase());
     for (let i = 0; i < authorKeys.length; i++) {
       for (let j = 0; j < authorKeys.length; j++) {
         if (i === j) continue;
@@ -510,68 +509,61 @@ function buildResearcherModel(store, scope = 'all') {
     for (const nameRaw of authors) {
       const name = String(nameRaw || '').trim();
       if (!name) continue;
+      const key = name.toLowerCase();
 
-      const nameKey = name.toLowerCase();
-      const profileKey = `${nameKey}||${inst}`;
-
-      let o = byProfile.get(profileKey);
+      let o = byName.get(key);
       if (!o) {
         o = {
-          id: profileKey,
+          id: key,
           name,
-          nameKey,
-          institute: inst,
+          institutes: new Set(),
           groups: new Set(),
           scopes: new Set(),
-          reportCount: 0,
           __reportIds: new Set(),
           lastActiveYear: null,
           __kwCounts: new Map(),
           __recentReports: [],
-          __coauthorDegree: 0,
         };
-        byProfile.set(profileKey, o);
+        byName.set(key, o);
       }
 
+      o.institutes.add(inst);
       if (group) o.groups.add(group);
       o.scopes.add(r.scope || 'all');
-      // Count each report at most once per researcher-profile (avoid duplicates & duplicate author listings)
-      if (!o.__reportIds.has(r.id)) {
-        o.__reportIds.add(r.id);
-        o.reportCount += 1;
-        if (r.year && (!o.lastActiveYear || r.year > o.lastActiveYear)) o.lastActiveYear = r.year;
+      o.__reportIds.add(r.id);
+      if (r.year && (!o.lastActiveYear || r.year > o.lastActiveYear)) o.lastActiveYear = r.year;
 
-        for (const t of toks) o.__kwCounts.set(t, (o.__kwCounts.get(t) || 0) + 1);
+      for (const t of toks) o.__kwCounts.set(t, (o.__kwCounts.get(t) || 0) + 1);
 
-        o.__recentReports.push({
-          id: r.id,
-          year: r.year,
-          title: r.title,
-          url: r.url,
-          institute: inst,
-          scope: r.scope,
-        });
-      }
+      o.__recentReports.push({
+        id: r.id,
+        year: r.year,
+        title: r.title,
+        url: r.url,
+        institute: inst,
+        scope: r.scope,
+      });
     }
   }
 
-  // Convert to list + attach collaboration degree (name-level)
+  // Base researchers list
   const rawResearchers = [];
-  for (const o of byProfile.values()) {
+  for (const o of byName.values()) {
+    const instList = Array.from(o.institutes.values()).filter(Boolean).sort();
     o.__recentReports.sort((a, b) => (b.year || 0) - (a.year || 0));
     const recentReports = o.__recentReports.slice(0, 5);
 
     const scopeLabel = (o.scopes.size === 1) ? Array.from(o.scopes)[0] : 'all';
-    const collabSet = collaborators.get(o.nameKey) || new Set();
+    const collabSet = collaborators.get(o.id) || new Set();
     const coauthorDegree = collabSet.size;
 
     rawResearchers.push({
       id: o.id,
       name: o.name,
-      institute: o.institute,
+      institutes: instList,
       groups: Array.from(o.groups.values()),
       scope: scopeLabel,
-      reportCount: o.reportCount,
+      reportCount: o.__reportIds.size,
       lastActiveYear: o.lastActiveYear,
       recentReports,
       __kwCounts: o.__kwCounts,
@@ -580,14 +572,13 @@ function buildResearcherModel(store, scope = 'all') {
     });
   }
 
-  // TF-IDF model over profiles
+  // TF-IDF model
   const { idf, N } = computeIdfFromResearchers(rawResearchers);
 
   const researchers = rawResearchers.map(r => {
     const { vec, norm, top } = buildTfIdfVector(r.__kwCounts, idf, 240);
     const keywords = top.slice(0, 16);
-
-    const searchText = `${r.name} ${r.institute} ${keywords.join(' ')} ${r.recentReports.slice(0, 5).map(x => x.title).join(' ')}`.toLowerCase();
+    const searchText = `${r.name} ${r.institutes.join(' ')} ${keywords.join(' ')} ${r.recentReports.slice(0, 5).map(x => x.title).join(' ')}`.toLowerCase();
     return {
       ...r,
       keywords,
@@ -602,7 +593,7 @@ function buildResearcherModel(store, scope = 'all') {
   return model;
 }
 
-function buildQueryVector(tokens, idf) {(tokens, idf) {
+function buildQueryVector(tokens, idf) {
   const counts = new Map();
   for (const t of tokens) counts.set(t, (counts.get(t) || 0) + 1);
   const vec = new Map();
@@ -617,38 +608,6 @@ function buildQueryVector(tokens, idf) {(tokens, idf) {
   const norm = Math.sqrt(norm2) || 1;
   return { vec, norm };
 }
-
-
-function getInstituteUrlByNameMap(store) {
-  if (store.__instUrlByName && store.__instUrlByName instanceof Map) return store.__instUrlByName;
-  const m = new Map();
-
-  const add = (name, url) => {
-    const n = String(name || '').trim();
-    const u = String(url || '').trim();
-    if (!n || !u) return;
-    m.set(n, u);
-    m.set(n.replace(/\s+/g, ''), u);
-  };
-
-  try {
-    for (const it of (store.localInstitutes || [])) add(it?.name, it?.url);
-    for (const it of (store.nationalInstitutes || [])) add(it?.name, it?.url);
-
-    const raw = store.nationalInstitutesRaw;
-    if (raw && typeof raw === 'object') {
-      for (const k of Object.keys(raw)) {
-        if (Array.isArray(raw[k])) for (const it of raw[k]) add(it?.name, it?.url);
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-
-  store.__instUrlByName = m;
-  return m;
-}
-
 
 function normalize0to1(x, lo, hi) {
   if (hi <= lo) return 0;
@@ -667,11 +626,7 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
 
   // Facets (scope-level)
   const instCounts = new Map();
-  for (const it of rows) {
-    const n = String(it.institute || '').trim();
-    if (!n) continue;
-    instCounts.set(n, (instCounts.get(n) || 0) + 1);
-  }
+  for (const it of rows) for (const n of it.institutes || []) instCounts.set(n, (instCounts.get(n) || 0) + 1);
   const facets = {
     institutes: Array.from(instCounts.entries())
       .map(([name, count]) => ({ name, count }))
@@ -684,20 +639,8 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
     const upper = inst.toUpperCase();
     const group = (upper === 'NRC') ? 'nrc' : (upper === 'NCT' || upper === 'NST') ? 'nst' : null;
     if (group) rows = rows.filter(r => (r.groups || []).includes(group));
-    else rows = rows.filter(r => r.institute === inst);
+    else rows = rows.filter(r => (r.institutes || []).includes(inst));
   }
-
-
-  const instUrlByName = getInstituteUrlByNameMap(store);
-
-  // Attach institute homepage url (if available) for hyperlinking in UI.
-  rows = rows.map((r) => {
-    const name = String(r.institute || '').trim();
-    return {
-      ...r,
-      instituteUrl: name ? (instUrlByName.get(name) || instUrlByName.get(name.replace(/\s+/g, '')) || '') : '',
-    };
-  });
 
   // Query analysis (supports sentence-style input)
   const qRaw = String(q || '').trim();
@@ -724,7 +667,7 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
     const coverage = tokensForCoverage.length ? (covered / tokensForCoverage.length) : 0;
 
     // Signals
-    const productivity = Math.log(1 + (r.reportCount ?? 0)); // ~0..?
+    const productivity = Math.log(1 + (r.reportCount || 0)); // ~0..?
     const recency = r.lastActiveYear ? (r.lastActiveYear - 2000) : 0;
     const collab = Math.log(1 + (r.__coauthorDegree || 0));
     const focus = r.__focus ?? 0.5;
@@ -761,7 +704,7 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
     if (nameBoost >= 1.6) reasons.push('이름 매칭');
     if (sim >= 0.25) reasons.push('전문분야 유사도 높음');
     if (coverage >= 0.5 && tokensForCoverage.length) reasons.push('질의 키워드 커버리지 높음');
-    if (((r.reportCount ?? 0)) >= 5) reasons.push('성과(보고서) 다수');
+    if ((r.reportCount || 0) >= 5) reasons.push('성과(보고서) 다수');
     if (r.lastActiveYear && r.lastActiveYear >= 2022) reasons.push('최근 활동');
 
     // Confidence: 0..1 (relative)
@@ -783,20 +726,8 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
   });
 
   // Sorting modes
-  // - match: AI 매칭(신뢰도/유사도) 높은 순
-  // - recent: 최근 활동 우선
-  // - outputs: 성과(보고서 수) 우선
-  // - relevance: 혼합 점수(__score) 우선
   const mode = String(sort || 'relevance');
-  if (mode === 'match' || mode === 'ai') {
-    scored.sort((a, b) =>
-      (b.__confidence || 0) - (a.__confidence || 0) ||
-      (b.__sim || 0) - (a.__sim || 0) ||
-      (b.__score || 0) - (a.__score || 0) ||
-      (b.lastActiveYear || 0) - (a.lastActiveYear || 0) ||
-      a.name.localeCompare(b.name)
-    );
-  } else if (mode === 'recent') {
+  if (mode === 'recent') {
     scored.sort((a, b) => (b.lastActiveYear || 0) - (a.lastActiveYear || 0) || (b.reportCount || 0) - (a.reportCount || 0) || a.name.localeCompare(b.name));
   } else if (mode === 'outputs') {
     scored.sort((a, b) => (b.reportCount || 0) - (a.reportCount || 0) || (b.lastActiveYear || 0) - (a.lastActiveYear || 0) || a.name.localeCompare(b.name));
@@ -812,12 +743,8 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
   const items = scored.slice(off, off + lim).map(r => ({
     id: r.id,
     name: r.name,
-    institute: {
-      name: r.institute || '',
-      url: r.instituteUrl || '',
-    },
-    instituteName: r.institute || '',
-    reportCount: r.reportCount || 0,
+    institutes: r.institutes,
+    reportCount: r.reportCount,
     lastActiveYear: r.lastActiveYear,
     scope: r.scope,
     keywords: r.keywords,
