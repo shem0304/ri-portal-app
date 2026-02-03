@@ -21,14 +21,28 @@ export async function apiFetch(path, { method = 'GET', headers, body, auth = fal
     ...(cache ? { cache } : {}),
     body: body ? JSON.stringify(body) : undefined,
   });
+
+  // Some production setups (e.g., misconfigured rewrites) may return HTML (index.html)
+  // for API routes. Parsing that as JSON throws: Unexpected token '<' ...
+  const contentType = (res.headers.get('content-type') || '').toLowerCase();
+
+  // No content
+  if (res.status === 204) return null;
+
   if (!res.ok) {
     let msg = `${res.status}`;
     try {
-      const j = await res.json();
-      msg = j?.error || msg;
-      // attach server payload for richer UI messages
-      // eslint-disable-next-line no-param-reassign
-      var __payload = j;
+      if (contentType.includes('application/json')) {
+        const j = await res.json();
+        msg = j?.error || msg;
+        // attach server payload for richer UI messages
+        // eslint-disable-next-line no-param-reassign
+        var __payload = j;
+      } else {
+        const t = await res.text();
+        const snippet = t?.slice?.(0, 200)?.replace?.(/\s+/g, ' ')?.trim?.() || '';
+        msg = `${msg} (non-JSON response: ${contentType || 'unknown'})${snippet ? `: ${snippet}` : ''}`;
+      }
     } catch {
       // ignore
     }
@@ -37,5 +51,18 @@ export async function apiFetch(path, { method = 'GET', headers, body, auth = fal
     if (typeof __payload !== 'undefined') err.data = __payload;
     throw err;
   }
+
+  if (!contentType.includes('application/json')) {
+    const t = await res.text();
+    const snippet = t?.slice?.(0, 200)?.replace?.(/\s+/g, ' ')?.trim?.() || '';
+    const err = new Error(
+      `Expected JSON but received ${contentType || 'unknown'} from ${path}. ` +
+        `This usually means /api is being rewritten to index.html on the server. ` +
+        (snippet ? `Response starts with: ${snippet}` : '')
+    );
+    err.status = res.status;
+    throw err;
+  }
+
   return res.json();
 }
