@@ -114,6 +114,32 @@ const NATIONAL_REPORTS = fs.existsSync(NATIONAL_REPORTS_PATH)
   ? readJson(NATIONAL_REPORTS_PATH).map((r) => ({ ...r, __scope: 'national' }))
   : [];
 
+// Institutes (for external homepage links)
+const LOCAL_INSTITUTES_PATH = path.join(DATA_DIR, "local_institutes.json");
+const NATIONAL_INSTITUTES_PATH = path.join(DATA_DIR, "national_institutes.json");
+const LOCAL_INSTITUTES = fs.existsSync(LOCAL_INSTITUTES_PATH) ? readJson(LOCAL_INSTITUTES_PATH) : [];
+
+function flattenNationalInstitutes(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  const items = [];
+  for (const k of Object.keys(raw)) {
+    if (k === 'updated_at' || k === 'sources') continue;
+    const v = raw[k];
+    if (Array.isArray(v)) items.push(...v);
+  }
+  return items;
+}
+
+const NATIONAL_INSTITUTES_RAW = fs.existsSync(NATIONAL_INSTITUTES_PATH) ? readJson(NATIONAL_INSTITUTES_PATH) : null;
+const NATIONAL_INSTITUTES = flattenNationalInstitutes(NATIONAL_INSTITUTES_RAW);
+
+const INSTITUTE_URL_MAP = new Map(
+  [...LOCAL_INSTITUTES, ...NATIONAL_INSTITUTES]
+    .filter((x) => x && x.name)
+    .map((x) => [String(x.name).trim(), x.url || null])
+);
+
 function getReportsByScope(scope) {
   if (scope === "local") return LOCAL_REPORTS;
   if (scope === "national") return NATIONAL_REPORTS;
@@ -1384,6 +1410,215 @@ app.get("/api/news/policy/latest", async (req, res) => {
       items: [],
     });
   }
+});
+
+// -----------------------------
+// Researchers search (derived from report authors)
+// -----------------------------
+
+function buildResearcherIndex(scope = 'all') {
+  const key = `researchers:index:${scope}`;
+  const cached = cacheGet(key);
+  if (cached) return cached;
+
+  const reports = getReportsByScope(scope);
+  const byName = new Map();
+
+  for (const r of reports) {
+    const authors = Array.isArray(r.authors) ? r.authors : [];
+    if (!authors.length) continue;
+
+    const inst = instituteName(r) || '';
+    const year = reportYear(r) || null;
+    const title = titleText(r) || '';
+    const url = reportUrl(r) || '';
+    const toks = tokenizeTitle(title);
+
+    for (const rawName of authors) {
+      const name = String(rawName || '').trim();
+      if (!name) continue;
+      let rec = byName.get(name);
+      if (!rec) {
+        rec = {
+          name,
+          institutes: new Set(),
+          reportCount: 0,
+          lastActiveYear: null,
+          tokenCounts: new Map(),
+          recentReports: [],
+        };
+        byName.set(name, rec);
+      }
+
+      rec.reportCount += 1;
+      if (inst) rec.institutes.add(inst);
+      if (year && (!rec.lastActiveYear || year > rec.lastActiveYear)) rec.lastActiveYear = year;
+
+      // Token profile
+      for (const t of toks) rec.tokenCounts.set(t, (rec.tokenCounts.get(t) || 0) + 1);
+
+      // Keep up to 10 recent reports (sorted later)
+      rec.recentReports.push({
+        id: r.id || r.report_id || `${name}-${rec.reportCount}`,
+        year,
+        title,
+        url,
+      });
+    }
+  }
+
+  const researchers = [...byName.values()].map((r) => {
+    // sort recent reports by year desc
+    r.recentReports.sort((a, b) => (b.year || 0) - (a.year || 0));
+    r.recentReports = r.recentReports.slice(0, 10);
+    return r;
+  });
+
+  // Build IDF over researchers
+  const df = new Map();
+  for (const r of researchers) {
+    for (const t of r.tokenCounts.keys()) df.set(t, (df.get(t) || 0) + 1);
+  }
+  const N = Math.max(1, researchers.length);
+
+  // Build tf-idf vectors and norms
+  for (const r of researchers) {
+    const vec = new Map();
+    let norm2 = 0;
+    const maxTf = Math.max(1, ...[...r.tokenCounts.values()]);
+    for (const [t, tf] of r.tokenCounts.entries()) {
+      const idf = Math.log((N + 1) / ((df.get(t) || 0) + 1)) + 1;
+      const w = (tf / maxTf) * idf;
+      vec.set(t, w);
+      norm2 += w * w;
+    }
+    r._tfidf = vec;
+    r._norm = Math.sqrt(norm2) || 1;
+  }
+
+  const index = { researchers, df, N };
+  return cacheSet(key, index);
+}
+
+function scoreResearcher(index, researcher, qTokens) {
+  const qSet = new Set(qTokens);
+  if (!qTokens.length) {
+    // No query: rank by outputs + recency
+    const rec = researcher.lastActiveYear ? Math.min(1, Math.max(0, (researcher.lastActiveYear - 2000) / 30)) : 0;
+    const out = Math.min(1, Math.log(1 + (researcher.reportCount || 0)) / Math.log(1 + 50));
+    const confidence = Math.max(0, Math.min(1, 0.55 * out + 0.45 * rec));
+    return { confidence, similarity: 0, coverage: 0, matchedKeywords: [], reasons: buildReasons(researcher, confidence) };
+  }
+
+  // Build query vector (idf only)
+  const qVec = new Map();
+  let qNorm2 = 0;
+  for (const t of qSet) {
+    const idf = Math.log((index.N + 1) / ((index.df.get(t) || 0) + 1)) + 1;
+    qVec.set(t, idf);
+    qNorm2 += idf * idf;
+  }
+  const qNorm = Math.sqrt(qNorm2) || 1;
+
+  // Cosine similarity
+  let dot = 0;
+  const contrib = [];
+  for (const [t, qw] of qVec.entries()) {
+    const rw = researcher._tfidf.get(t) || 0;
+    if (rw) {
+      const c = rw * qw;
+      dot += c;
+      contrib.push({ t, c });
+    }
+  }
+  const similarity = dot / (researcher._norm * qNorm);
+  const matched = contrib.sort((a, b) => b.c - a.c).slice(0, 8).map((x) => x.t);
+  const coverage = qSet.size ? matched.length / qSet.size : 0;
+
+  const rec = researcher.lastActiveYear ? Math.min(1, Math.max(0, (researcher.lastActiveYear - 2000) / 30)) : 0;
+  const out = Math.min(1, Math.log(1 + (researcher.reportCount || 0)) / Math.log(1 + 50));
+
+  // Hybrid confidence (0..1)
+  const confidence = Math.max(0, Math.min(1, 0.70 * similarity + 0.15 * coverage + 0.10 * rec + 0.05 * out));
+  return { confidence, similarity, coverage, matchedKeywords: matched, reasons: buildReasons(researcher, confidence) };
+}
+
+function buildReasons(r, confidence) {
+  const reasons = [];
+  if (confidence >= 0.75) reasons.push('전문분야 유사도 높음');
+  else if (confidence >= 0.55) reasons.push('관련 주제 다수');
+  if (r.lastActiveYear) reasons.push(`최근 활동 ${r.lastActiveYear}`);
+  if ((r.reportCount || 0) >= 10) reasons.push(`보고서 ${r.reportCount}건`);
+  return reasons.slice(0, 3);
+}
+
+app.get('/api/researchers/search', (req, res) => {
+  const scope = normalizeStr(req.query.scope) || 'all';
+  const institute = normalizeStr(req.query.institute);
+  const q = normalizeStr(req.query.q) || '';
+  const sort = normalizeStr(req.query.sort) || 'match';
+  const limit = Math.min(200, Math.max(1, safeInt(req.query.limit, 24)));
+  const offset = Math.max(0, safeInt(req.query.offset, 0));
+
+  const idx = buildResearcherIndex(scope);
+  const qTokens = tokenizeTitle(q);
+
+  let list = idx.researchers;
+  if (institute) {
+    list = list.filter((r) => r.institutes.has(institute));
+  }
+
+  const scored = list.map((r) => {
+    const match = scoreResearcher(idx, r, qTokens);
+    const institutesArr = [...r.institutes];
+    const instituteLinks = institutesArr.map((name) => ({ name, url: INSTITUTE_URL_MAP.get(name) || null }));
+    return {
+      id: r.name,
+      name: r.name,
+      scope,
+      institutes: institutesArr,
+      instituteLinks,
+      reportCount: r.reportCount,
+      lastActiveYear: r.lastActiveYear,
+      keywords: [...r.tokenCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([t]) => t),
+      recentReports: r.recentReports.slice(0, 10),
+      match,
+    };
+  });
+
+  // Sorting
+  const sorted = scored.slice().sort((a, b) => {
+    if (sort === 'recent') {
+      return (b.lastActiveYear || 0) - (a.lastActiveYear || 0) || (b.reportCount || 0) - (a.reportCount || 0);
+    }
+    if (sort === 'outputs') {
+      return (b.reportCount || 0) - (a.reportCount || 0) || (b.lastActiveYear || 0) - (a.lastActiveYear || 0);
+    }
+    // default: AI match desc
+    const bc = Number(b.match?.confidence || 0);
+    const ac = Number(a.match?.confidence || 0);
+    if (bc !== ac) return bc - ac;
+    const bs = Number(b.match?.similarity || 0);
+    const as = Number(a.match?.similarity || 0);
+    if (bs !== as) return bs - as;
+    return String(a.name).localeCompare(String(b.name));
+  });
+
+  // Facets: institute counts (top 300)
+  const facetMap = new Map();
+  for (const it of sorted) {
+    for (const inst of it.institutes || []) facetMap.set(inst, (facetMap.get(inst) || 0) + 1);
+  }
+  const facets = {
+    institutes: [...facetMap.entries()]
+      .map(([name, count]) => ({ name, count, url: INSTITUTE_URL_MAP.get(name) || null }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 300),
+  };
+
+  const total = sorted.length;
+  const items = sorted.slice(offset, offset + limit);
+  return res.json({ items, total, limit, offset, facets, queryAnalysis: { raw: q, tokens: qTokens } });
 });
 
 // -----------------------------

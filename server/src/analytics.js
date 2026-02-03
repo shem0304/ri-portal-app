@@ -706,8 +706,20 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
   });
 
   // Sorting modes
+  // - match: AI 매칭(신뢰도/유사도) 높은 순
+  // - recent: 최근 활동 우선
+  // - outputs: 성과(보고서 수) 우선
+  // - relevance: 혼합 점수(__score) 우선
   const mode = String(sort || 'relevance');
-  if (mode === 'recent') {
+  if (mode === 'match' || mode === 'ai') {
+    scored.sort((a, b) =>
+      (b.__confidence || 0) - (a.__confidence || 0) ||
+      (b.__sim || 0) - (a.__sim || 0) ||
+      (b.__score || 0) - (a.__score || 0) ||
+      (b.lastActiveYear || 0) - (a.lastActiveYear || 0) ||
+      a.name.localeCompare(b.name)
+    );
+  } else if (mode === 'recent') {
     scored.sort((a, b) => (b.lastActiveYear || 0) - (a.lastActiveYear || 0) || (b.reportCount || 0) - (a.reportCount || 0) || a.name.localeCompare(b.name));
   } else if (mode === 'outputs') {
     scored.sort((a, b) => (b.reportCount || 0) - (a.reportCount || 0) || (b.lastActiveYear || 0) - (a.lastActiveYear || 0) || a.name.localeCompare(b.name));
