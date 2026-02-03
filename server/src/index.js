@@ -28,6 +28,7 @@ import {
   getWordCloud,
   getBurstKeywords,
   searchReports,
+  searchResearchers,
   buildCooccurrenceNetwork,
   instituteKeywordHeatmap,
   relatedReportsByKeyword,
@@ -139,6 +140,12 @@ app.get('/api/press/latest', async (req, res) => {
   const limit = Number(req.query.limit || 10);
   const data = await getLatestPress({ limit });
   res.json(data);
+});
+
+// --- Researchers (public; derived from report authors)
+app.get('/api/researchers/search', (req, res) => {
+  const { q, scope, institute, sort, limit, offset } = req.query;
+  res.json(searchResearchers(store, { q, scope, institute, sort, limit, offset }));
 });
 
 // --- Protected reports

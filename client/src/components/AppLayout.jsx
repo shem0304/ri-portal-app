@@ -11,6 +11,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import SpellcheckIcon from '@mui/icons-material/Spellcheck';
 import ChatIcon from '@mui/icons-material/Chat';
+import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import { chatListConversations } from '../api/chat.js';
@@ -257,6 +258,11 @@ export default function AppLayout() {
         <ListItemButton component={NavLink} to='/reports'>
           <ListItemIcon><ScienceIcon /></ListItemIcon>
           <ListItemText primary='연구보고서' secondary={user ? '로그인됨' : '로그인 필요'} />
+        </ListItemButton>
+
+        <ListItemButton component={NavLink} to='/researchers'>
+          <ListItemIcon><PersonSearchIcon /></ListItemIcon>
+          <ListItemText primary='연구자 찾기' secondary='전문분야·기관·성과' />
         </ListItemButton>
 
         {user ? (
