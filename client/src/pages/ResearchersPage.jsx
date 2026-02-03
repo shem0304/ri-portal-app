@@ -5,7 +5,6 @@ import {
   Pagination, Select, Stack, TextField, Tooltip, Typography
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { apiFetch } from '../api';
 
@@ -98,61 +97,31 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
 
         <Stack direction='row' spacing={1} sx={{ mt: 1.25, flexWrap: 'wrap' }}>
           <Chip size='small' variant='outlined' label={`보고서 ${item.reportCount || 0}건`} />
+          <Button
+            size='small'
+            variant='outlined'
+            href={buildReportsLink({ name: item.name, institute: (item.institute?.name || item.instituteName || ''), scope: item.scope })}
+          >
+            보고서 보기
+          </Button>
           {item.scope === 'local' ? (
             <Chip size='small' variant='outlined' label='지자체' />
           ) : item.scope === 'national' ? (
             <Chip size='small' variant='outlined' label='정부출연' />
           ) : null}
         </Stack>
-
-        {(item.recentReports || []).length ? (
-          <Box sx={{ mt: 1.5 }}>
-            <Stack direction='row' alignItems='center' justifyContent='space-between' sx={{ mb: 0.5 }}>
-              <Typography variant='caption' color='text.secondary'>주요 보고서</Typography>
-              <Typography variant='caption' color='text.secondary'>
-                {(item.recentReports || []).length}건 중 상위 2건
-              </Typography>
-            </Stack>
-
-            <Stack spacing={0.75}>
-              {item.recentReports.slice(0, 2).map((r) => (
-                <Stack key={r.id} direction='row' spacing={1} alignItems='center' justifyContent='space-between'>
-                  <Typography
-                    variant='body2'
-                    sx={{
-                      fontWeight: 650,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      pr: 1,
-                      flex: 1,
-                    }}
-                    title={`${r.year ? `[${r.year}] ` : ''}${r.title}`}
-                  >
-                    {r.year ? `[${r.year}] ` : ''}{r.title}
-                  </Typography>
-
-                  <Button
-                    size='small'
-                    variant='outlined'
-                    endIcon={<OpenInNewIcon fontSize='small' />}
-                    component='a'
-                    href={r.url || '#'}
-                    target='_blank'
-                    rel='noreferrer'
-                    disabled={!r.url}
-                    sx={{ whiteSpace: 'nowrap' }}
-                  >
-                    열기
-                  </Button>
-                </Stack>
-              ))}
-            </Stack>
-          </Box>
-        ) : null}
       </CardContent>
     </Card>
   );
+}
+
+
+function buildReportsLink({ name, institute, scope }) {
+  const params = new URLSearchParams();
+  if (name) params.set('q', name);
+  if (institute) params.set('institute', institute);
+  if (scope && scope !== 'all') params.set('scope', scope);
+  return `/reports?${params.toString()}`;
 }
 
 export default function ResearchersPage() {

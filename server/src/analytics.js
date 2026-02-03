@@ -622,19 +622,33 @@ function buildQueryVector(tokens, idf) {(tokens, idf) {
 function getInstituteUrlByNameMap(store) {
   if (store.__instUrlByName && store.__instUrlByName instanceof Map) return store.__instUrlByName;
   const m = new Map();
+
+  const add = (name, url) => {
+    const n = String(name || '').trim();
+    const u = String(url || '').trim();
+    if (!n || !u) return;
+    m.set(n, u);
+    m.set(n.replace(/\s+/g, ''), u);
+  };
+
   try {
-    for (const it of (store.localInstitutes || [])) {
-      if (it?.name && it?.url) m.set(it.name, it.url);
-    }
-    for (const it of (store.nationalInstitutes || [])) {
-      if (it?.name && it?.url) m.set(it.name, it.url);
+    for (const it of (store.localInstitutes || [])) add(it?.name, it?.url);
+    for (const it of (store.nationalInstitutes || [])) add(it?.name, it?.url);
+
+    const raw = store.nationalInstitutesRaw;
+    if (raw && typeof raw === 'object') {
+      for (const k of Object.keys(raw)) {
+        if (Array.isArray(raw[k])) for (const it of raw[k]) add(it?.name, it?.url);
+      }
     }
   } catch (e) {
     // ignore
   }
+
   store.__instUrlByName = m;
   return m;
 }
+
 
 function normalize0to1(x, lo, hi) {
   if (hi <= lo) return 0;
@@ -681,7 +695,7 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
     const name = String(r.institute || '').trim();
     return {
       ...r,
-      instituteUrl: name ? (instUrlByName.get(name) || '') : '',
+      instituteUrl: name ? (instUrlByName.get(name) || instUrlByName.get(name.replace(/\s+/g, '')) || '') : '',
     };
   });
 
