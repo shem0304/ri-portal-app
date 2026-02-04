@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Box, Card, CardContent, Grid, Link, MenuItem, Select, TextField, Typography, Button, Stack, Divider
+  Box, Card, CardContent, Grid, Link, MenuItem, Select, TextField, Typography, Button, Stack, Divider, LinearProgress
 } from '@mui/material';
 import { apiFetch } from '../api';
 
@@ -234,6 +234,8 @@ React.useEffect(() => {
     [filtered]
   );
 
+  const anyLoading = localLoading || nationalLoading || pressLoading || policyLoading;
+
 
   return (
     <Box>
@@ -241,6 +243,15 @@ React.useEffect(() => {
         <CardContent>
           <Typography variant='h6' sx={{ fontWeight: 800 }}>기관</Typography>
           <Divider sx={{ my: 2 }} />
+
+          {anyLoading ? (
+            <Box sx={{ mb: 2 }}>
+              <LinearProgress />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                데이터를 불러오는 중…
+              </Typography>
+            </Box>
+          ) : null}
 
           <Grid container spacing={2}>
             <Grid item xs={12} md={8}>
@@ -262,9 +273,12 @@ React.useEffect(() => {
 
         <Stack spacing={1}>
           {pressLoading ? (
-            <Typography variant="body2" color="text.secondary">
-              보도자료를 불러오는 중…
-            </Typography>
+            <Box sx={{ py: 1 }}>
+              <LinearProgress />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                보도자료를 불러오는 중…
+              </Typography>
+            </Box>
           ) : null}
           {!pressLoading ? press.slice(0, 10).map((it, i) => (
             <Card
@@ -311,6 +325,14 @@ React.useEffect(() => {
         </Stack>
 
         <Stack spacing={1}>
+          {policyLoading ? (
+            <Box sx={{ py: 1 }}>
+              <LinearProgress />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                정책뉴스를 불러오는 중…
+              </Typography>
+            </Box>
+          ) : null}
           {policyNews.slice(0, 10).map((it, i) => (
             <Card
               key={i}
@@ -389,15 +411,24 @@ React.useEffect(() => {
                     }}
                   >
                     {localLoading ? (
-                      <Typography variant="body2" color="text.secondary">
-                        지자체 연구기관 데이터를 불러오는 중…
-                      </Typography>
+                      <Box sx={{ gridColumn: '1 / -1', py: 1 }}>
+                        <LinearProgress />
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                          지자체 연구기관 데이터를 불러오는 중…
+                        </Typography>
+                      </Box>
                     ) : null}
                     {!localLoading ? localFiltered.map((it) => (
-                      <InstituteCard key={`local-${it.name}`} {...it} />
+                      <InstituteCard
+                        key={`local-${it.name}`}
+                        name={it.name}
+                        region={it.region}
+                        url={it.homepage || it.url}
+                        scope="local"
+                      />
                     )) : null}
                     {!localLoading && localFiltered.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography variant="body2" color="text.secondary" sx={{ gridColumn: '1 / -1' }}>
                         지자체 연구기관 데이터가 없습니다.
                       </Typography>
                     ) : null}
@@ -415,11 +446,25 @@ React.useEffect(() => {
                       py: 2,
                     }}
                   >
-                    {nationalFiltered.map((it) => (
-                      <InstituteCard key={`national-${it.name}`} {...it} />
-                    ))}
-                    {nationalFiltered.length === 0 ? (
-                      <Typography variant="body2" color="text.secondary">
+                    {nationalLoading ? (
+                      <Box sx={{ gridColumn: '1 / -1', py: 1 }}>
+                        <LinearProgress />
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                          정부출연기관 데이터를 불러오는 중…
+                        </Typography>
+                      </Box>
+                    ) : null}
+                    {!nationalLoading ? nationalFiltered.map((it) => (
+                      <InstituteCard
+                        key={`national-${it.name}`}
+                        name={it.name}
+                        group={it.group || it.category || it.type}
+                        url={it.homepage || it.url}
+                        scope="national"
+                      />
+                    )) : null}
+                    {!nationalLoading && nationalFiltered.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary" sx={{ gridColumn: '1 / -1' }}>
                         정부출연기관 데이터가 없습니다.
                       </Typography>
                     ) : null}
@@ -436,9 +481,47 @@ React.useEffect(() => {
                     py: 2,
                   }}
                 >
-                  {(scope === 'local' ? localFiltered : nationalFiltered).map((it) => (
-                    <InstituteCard key={`${it.scope}-${it.name}`} {...it} />
-                  ))}
+                  {scope === 'local' && localLoading ? (
+                    <Box sx={{ gridColumn: '1 / -1', py: 1 }}>
+                      <LinearProgress />
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        지자체 연구기관 데이터를 불러오는 중…
+                      </Typography>
+                    </Box>
+                  ) : null}
+
+                  {scope === 'national' && nationalLoading ? (
+                    <Box sx={{ gridColumn: '1 / -1', py: 1 }}>
+                      <LinearProgress />
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        정부출연기관 데이터를 불러오는 중…
+                      </Typography>
+                    </Box>
+                  ) : null}
+
+                  {scope === 'local' && !localLoading
+                    ? localFiltered.map((it) => (
+                        <InstituteCard
+                          key={`local-${it.name}`}
+                          name={it.name}
+                          region={it.region}
+                          url={it.homepage || it.url}
+                          scope="local"
+                        />
+                      ))
+                    : null}
+
+                  {scope === 'national' && !nationalLoading
+                    ? nationalFiltered.map((it) => (
+                        <InstituteCard
+                          key={`national-${it.name}`}
+                          name={it.name}
+                          group={it.group || it.category || it.type}
+                          url={it.homepage || it.url}
+                          scope="national"
+                        />
+                      ))
+                    : null}
                 </Box>
               )}
             </Grid>
