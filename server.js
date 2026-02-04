@@ -1489,15 +1489,21 @@ function buildResearcherIndex(scope = 'all') {
     const url = reportUrl(r) || '';
     const toks = tokenizeTitle(title);
 
-    for (const rawName of authors) {
+    for (let ai = 0; ai < authors.length; ai++) {
+      const rawName = authors[ai];
       const name = String(rawName || '').trim();
       if (!name) continue;
+      const isLead = ai === 0;
+      const w = isLead ? 1.6 : 1.0; // lead(연구책임자) 가중치
+
       let rec = byName.get(name);
       if (!rec) {
         rec = {
           name,
           institutes: new Set(),
           reportCount: 0,
+          leadReportCount: 0,
+          weightedOutputs: 0,
           lastActiveYear: null,
           tokenCounts: new Map(),
           recentReports: [],
@@ -1506,11 +1512,13 @@ function buildResearcherIndex(scope = 'all') {
       }
 
       rec.reportCount += 1;
+      if (isLead) rec.leadReportCount += 1;
+      rec.weightedOutputs += w;
       if (inst) rec.institutes.add(inst);
       if (year && (!rec.lastActiveYear || year > rec.lastActiveYear)) rec.lastActiveYear = year;
 
       // Token profile
-      for (const t of toks) rec.tokenCounts.set(t, (rec.tokenCounts.get(t) || 0) + 1);
+      for (const t of toks) rec.tokenCounts.set(t, (rec.tokenCounts.get(t) || 0) + w);
 
       // Keep up to 10 recent reports (sorted later)
       rec.recentReports.push({
@@ -1560,7 +1568,8 @@ function scoreResearcher(index, researcher, qTokens) {
   if (!qTokens.length) {
     // No query: rank by outputs + recency
     const rec = researcher.lastActiveYear ? Math.min(1, Math.max(0, (researcher.lastActiveYear - 2000) / 30)) : 0;
-    const out = Math.min(1, Math.log(1 + (researcher.reportCount || 0)) / Math.log(1 + 50));
+    const outBase = (researcher.weightedOutputs ?? researcher.reportCount ?? 0);
+    const out = Math.min(1, Math.log(1 + outBase) / Math.log(1 + 80));
     const confidence = Math.max(0, Math.min(1, 0.55 * out + 0.45 * rec));
     return { confidence, similarity: 0, coverage: 0, matchedKeywords: [], reasons: buildReasons(researcher, confidence) };
   }
@@ -1591,7 +1600,8 @@ function scoreResearcher(index, researcher, qTokens) {
   const coverage = qSet.size ? matched.length / qSet.size : 0;
 
   const rec = researcher.lastActiveYear ? Math.min(1, Math.max(0, (researcher.lastActiveYear - 2000) / 30)) : 0;
-  const out = Math.min(1, Math.log(1 + (researcher.reportCount || 0)) / Math.log(1 + 50));
+  const outBase = (researcher.weightedOutputs ?? researcher.reportCount ?? 0);
+  const out = Math.min(1, Math.log(1 + outBase) / Math.log(1 + 80));
 
   // Hybrid confidence (0..1)
   const confidence = Math.max(0, Math.min(1, 0.70 * similarity + 0.15 * coverage + 0.10 * rec + 0.05 * out));

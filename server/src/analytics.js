@@ -58,12 +58,9 @@ function applyNeedleFilter(store, rows, needle) {
 
      // Also match against authors so deep links like /reports?q=<researcher name>
      // reliably show the researcher's reports.
-     const a = r.authors;
-     if (Array.isArray(a)) {
-       if (a.some(x => String(x || '').toLowerCase().includes(n))) return true;
-     } else if (a) {
-       if (String(a || '').toLowerCase().includes(n)) return true;
-     }
+     // Some datasets use different keys (author/writer/writers), so normalize here.
+     const authors = normalizeAuthors(r.authors || r.author || r.writers || r.writer);
+     if (authors.some(x => String(x || '').toLowerCase().includes(n))) return true;
 
     const toks = store.tokensById.get(r.id) || [];
     return toks.some(tok => tok.includes(n));
@@ -311,7 +308,9 @@ export function searchReports(store, { q = '', scope = 'all', year, institute, l
     id: r.id,
     year: r.year,
     title: r.title,
-    authors: r.authors,
+    // Normalize to an array so the UI can consistently render and so searches
+    // work even when the raw dataset uses alternate keys (author/writer/writers).
+    authors: normalizeAuthors(r.authors || r.author || r.writers || r.writer),
     institute: r.institute,
     url: r.url,
     scope: r.scope,
@@ -490,6 +489,15 @@ function buildResearcherModel(store, scope = 'all') {
     const authors = Array.from(authorMap.values());
     if (!authors.length) continue;
 
+    // Lead author(첫번째 연구자명) 가중치: 원자료 순서를 기준으로 첫 번째 유효 저자
+    let leadKey = '';
+    for (const aRaw of authorsRaw) {
+      const t = String(aRaw || '').trim();
+      if (!t) continue;
+      leadKey = t.toLowerCase();
+      break;
+    }
+
     // Build co-author sets (collaboration signal)
     const authorKeys = authors.map(a => String(a || '').trim()).filter(Boolean).map(a => a.toLowerCase());
     for (let i = 0; i < authorKeys.length; i++) {
@@ -510,6 +518,8 @@ function buildResearcherModel(store, scope = 'all') {
       const name = String(nameRaw || '').trim();
       if (!name) continue;
       const key = name.toLowerCase();
+      const isLead = !!leadKey && key === leadKey;
+      const w = isLead ? 1.6 : 1.0; // lead(연구책임자) 가중치
 
       let o = byName.get(key);
       if (!o) {
@@ -520,6 +530,8 @@ function buildResearcherModel(store, scope = 'all') {
           groups: new Set(),
           scopes: new Set(),
           __reportIds: new Set(),
+          __weightedOutputs: 0,
+          __leadReportIds: new Set(),
           lastActiveYear: null,
           __kwCounts: new Map(),
           __recentReports: [],
@@ -531,9 +543,11 @@ function buildResearcherModel(store, scope = 'all') {
       if (group) o.groups.add(group);
       o.scopes.add(r.scope || 'all');
       o.__reportIds.add(r.id);
+      o.__weightedOutputs += w;
+      if (isLead) o.__leadReportIds.add(r.id);
       if (r.year && (!o.lastActiveYear || r.year > o.lastActiveYear)) o.lastActiveYear = r.year;
 
-      for (const t of toks) o.__kwCounts.set(t, (o.__kwCounts.get(t) || 0) + 1);
+      for (const t of toks) o.__kwCounts.set(t, (o.__kwCounts.get(t) || 0) + w);
 
       o.__recentReports.push({
         id: r.id,
@@ -564,6 +578,8 @@ function buildResearcherModel(store, scope = 'all') {
       groups: Array.from(o.groups.values()),
       scope: scopeLabel,
       reportCount: o.__reportIds.size,
+      __weightedOutputs: o.__weightedOutputs,
+      __leadReportCount: o.__leadReportIds.size,
       lastActiveYear: o.lastActiveYear,
       recentReports,
       __kwCounts: o.__kwCounts,
@@ -667,7 +683,8 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
     const coverage = tokensForCoverage.length ? (covered / tokensForCoverage.length) : 0;
 
     // Signals
-    const productivity = Math.log(1 + (r.reportCount || 0)); // ~0..?
+    const outBase = (r.__weightedOutputs ?? r.reportCount ?? 0);
+    const productivity = Math.log(1 + outBase); // ~0..?
     const recency = r.lastActiveYear ? (r.lastActiveYear - 2000) : 0;
     const collab = Math.log(1 + (r.__coauthorDegree || 0));
     const focus = r.__focus ?? 0.5;
