@@ -19,6 +19,8 @@ import { useAuth } from '../state/AuthContext';
 
 const drawerWidth = 260;
 
+const PORTAL_HOME_URL = 'https://ri-portal-app.onrender.com/';
+
 export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const { user, logout } = useAuth();
@@ -238,7 +240,7 @@ export default function AppLayout() {
 
   const drawer = (
     <Box sx={{ height: '100%' }}>
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+      <Box component='a' href={PORTAL_HOME_URL} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5, color: 'inherit', textDecoration: 'none' }}>
         <Avatar sx={{ width: 36, height: 36 }}>RI</Avatar>
         <Box>
           <Typography variant='subtitle1' sx={{ fontWeight: 700, lineHeight: 1.2 }}>RI Portal</Typography>
@@ -305,7 +307,7 @@ export default function AppLayout() {
           <IconButton color='inherit' edge='start' onClick={toggle} sx={{ mr: 1, display: { md: 'none' } }}>
             <MenuIcon />
           </IconButton>
-          <Typography variant='h6' sx={{ flexGrow: 1 }}>지자체연구원 통합 포털</Typography>
+          <Typography component='a' href={PORTAL_HOME_URL} variant='h6' sx={{ flexGrow: 1, color: 'inherit', textDecoration: 'none' }}>지자체연구원 통합 포털</Typography>
           {user ? (
             <Tooltip title={unreadCount ? `새 채팅 ${unreadCount}건` : '채팅'}>
               <IconButton
