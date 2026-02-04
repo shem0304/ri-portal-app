@@ -32,7 +32,14 @@ function ResearcherCard({ item, highlightKeywords = [], currentScope = 'all', cu
     item?.instituteName ||
     (Array.isArray(item?.institutes) ? item.institutes[0] : '') ||
     '';
-  const instUrl = item?.institute?.url || item?.instituteUrl || '';
+  // Render(프로덕션) 서버는 instituteLinks 형태로 내려올 수 있어 하위호환 처리
+  const instUrl =
+    item?.institute?.url ||
+    item?.instituteUrl ||
+    (Array.isArray(item?.instituteLinks)
+      ? (item.instituteLinks.find((x) => String(x?.name || '').trim() === String(instName).trim())?.url || '')
+      : '') ||
+    '';
   const navigate = useNavigate();
 
   const handleReportsClick = React.useCallback(() => {

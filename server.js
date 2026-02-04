@@ -453,6 +453,60 @@ function instituteName(r) {
   return normalizeStr(r.institute || r.institute_name || r.org || "");
 }
 
+function authorsText(r) {
+  // Normalize common author field variants across datasets
+  const candidates = [
+    r.authors,
+    r.author,
+    r.writer,
+    r.writers,
+    r.researcher,
+    r.researchers,
+    r.researcher_name,
+    r.researcher_names,
+    r.author_name,
+    r.author_names,
+  ];
+
+  // Flatten arrays/objects into a single string
+  const parts = [];
+  for (const c of candidates) {
+    if (!c) continue;
+    if (typeof c === 'string') {
+      parts.push(c);
+      continue;
+    }
+    if (Array.isArray(c)) {
+      for (const item of c) {
+        if (!item) continue;
+        if (typeof item === 'string') parts.push(item);
+        else if (typeof item === 'object') {
+          const name = item.name || item.author || item.researcher || item.full_name || item.display || item.label;
+          if (name) parts.push(String(name));
+        }
+      }
+      continue;
+    }
+    if (typeof c === 'object') {
+      // Common shapes: { name: '...' } or { items: [...] }
+      if (c.name) parts.push(String(c.name));
+      const arr = toArrayPayload(c);
+      if (Array.isArray(arr) && arr.length) {
+        for (const item of arr) {
+          if (!item) continue;
+          if (typeof item === 'string') parts.push(item);
+          else if (typeof item === 'object') {
+            const name = item.name || item.author || item.researcher || item.full_name || item.display || item.label;
+            if (name) parts.push(String(name));
+          }
+        }
+      }
+    }
+  }
+
+  return normalizeStr(parts.join(' '));
+}
+
 function reportGroup(r) {
   // For national scope, some datasets label affiliation as NRC/NCT (or NST/NCT).
   return normalizeStr(
@@ -472,7 +526,8 @@ function reportUrl(r) {
 
 function matchesQuery(r, q) {
   if (!q) return true;
-  const t = `${titleText(r)} ${instituteName(r)}`.toLowerCase();
+  // Search across title/keywords/institute + authors
+  const t = `${titleText(r)} ${instituteName(r)} ${authorsText(r)}`.toLowerCase();
   return t.includes(q.toLowerCase());
 }
 
@@ -1572,11 +1627,18 @@ app.get('/api/researchers/search', (req, res) => {
     const match = scoreResearcher(idx, r, qTokens);
     const institutesArr = [...r.institutes];
     const instituteLinks = institutesArr.map((name) => ({ name, url: INSTITUTE_URL_MAP.get(name) || null }));
+
+    // Primary institute object for UI (ResearchersPage expects item.institute.name/url)
+    const primaryInstituteName = institutesArr[0] || '';
+    const primaryInstituteUrl = primaryInstituteName ? (INSTITUTE_URL_MAP.get(primaryInstituteName) || null) : null;
     return {
       id: r.name,
       name: r.name,
       scope,
       institutes: institutesArr,
+      institute: primaryInstituteName ? { name: primaryInstituteName, url: primaryInstituteUrl } : null,
+      instituteName: primaryInstituteName || null,
+      instituteUrl: primaryInstituteUrl,
       instituteLinks,
       reportCount: r.reportCount,
       lastActiveYear: r.lastActiveYear,
