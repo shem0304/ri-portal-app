@@ -39,7 +39,9 @@ function InstituteCard({ name, region, group, url, scope }) {
   // Avoid duplicated labels like "정부출연 정부출연".
   // For national institutes, show NRC/NCT (group) instead of repeating the same word twice.
   const scopeLabel = scope === 'local' ? '지자체' : scope === 'national' ? '정부출연' : '';
-  const leftLabel = scope === 'national' ? (group || '') : (region || '전체');
+  const g = group ? String(group).trim() : '';
+  const normGroup = g ? (g.toUpperCase() === 'NRC' ? 'NRC' : g.toUpperCase() === 'NCT' ? 'NCT' : g) : '';
+  const leftLabel = scope === 'national' ? (normGroup || '') : (region || '전체');
   return (
     <Card
       variant="outlined"
@@ -106,17 +108,24 @@ export default function InstitutesPage() {
   const [scope, setScope] = React.useState('all'); // all | local | national
   const [region, setRegion] = React.useState('전체');
   const [local, setLocal] = React.useState([]);
+  const [localLoading, setLocalLoading] = React.useState(true);
   const [national, setNational] = React.useState([]);
+  const [nationalLoading, setNationalLoading] = React.useState(true);
   const [press, setPress] = React.useState([]);
+  const [pressLoading, setPressLoading] = React.useState(true);
   const [pressNote, setPressNote] = React.useState('');
   const PRESS_MORE_URL = 'https://www.korea.kr/briefing/pressReleaseList.do';
   const POLICY_MORE_URL = 'https://www.korea.kr/news/policyNewsList.do';
   const [policyNews, setPolicyNews] = React.useState([]);
+  const [policyLoading, setPolicyLoading] = React.useState(true);
   const [policyNote, setPolicyNote] = React.useState('');
 
     const [nationalGroup, setNationalGroup] = React.useState('전체'); // 전체 | NRC | NCT
   React.useEffect(() => {
   (async () => {
+    setLocalLoading(true);
+    setPressLoading(true);
+    setPolicyLoading(true);
     try {
       const [l, p, n] = await Promise.all([
         apiFetch('/api/institutes/local'),
@@ -128,9 +137,15 @@ export default function InstitutesPage() {
       setPressNote((p && p.note) || '');
       setPolicyNews(normalizeItems(n));
       setPolicyNote((n && n.note) || '');
+      setLocalLoading(false);
+      setPressLoading(false);
+      setPolicyLoading(false);
     } catch (e) {
       // Keep page usable even if external news fetch fails
       console.error(e);
+      setLocalLoading(false);
+      setPressLoading(false);
+      setPolicyLoading(false);
     }
   })();
 }, []);
@@ -138,6 +153,7 @@ React.useEffect(() => {
   if (scope !== 'national' && scope !== 'all') return;
 
   (async () => {
+    setNationalLoading(true);
     const endpoint =
       scope === 'all'
         ? '/api/institutes/national'
@@ -147,6 +163,7 @@ React.useEffect(() => {
               ? '/api/institutes/national/nct'
               : '/api/institutes/national');
 
+    try {
     const data = await apiFetch(endpoint);
     const items = normalizeItems(data);
     // Some endpoints return items without explicit group info.
@@ -155,6 +172,12 @@ React.useEffect(() => {
       ? items.map((it) => ({ ...it, group: it.group || it.category || it.type || nationalGroup }))
       : items;
     setNational(stamped);
+    setNationalLoading(false);
+    } catch (e) {
+      console.error(e);
+      setNational([]);
+      setNationalLoading(false);
+    }
   })();
 }, [scope, nationalGroup]);
 
@@ -238,7 +261,12 @@ React.useEffect(() => {
         </Stack>
 
         <Stack spacing={1}>
-          {press.slice(0, 10).map((it, i) => (
+          {pressLoading ? (
+            <Typography variant="body2" color="text.secondary">
+              보도자료를 불러오는 중…
+            </Typography>
+          ) : null}
+          {!pressLoading ? press.slice(0, 10).map((it, i) => (
             <Card
               key={i}
               variant="outlined"
@@ -251,7 +279,7 @@ React.useEffect(() => {
                 </Typography>
               </CardContent>
             </Card>
-          ))}
+          )) : null}
         </Stack>
 
         {press.length === 0 ? (
@@ -360,10 +388,15 @@ React.useEffect(() => {
                       py: 2,
                     }}
                   >
-                    {localFiltered.map((it) => (
+                    {localLoading ? (
+                      <Typography variant="body2" color="text.secondary">
+                        지자체 연구기관 데이터를 불러오는 중…
+                      </Typography>
+                    ) : null}
+                    {!localLoading ? localFiltered.map((it) => (
                       <InstituteCard key={`local-${it.name}`} {...it} />
-                    ))}
-                    {localFiltered.length === 0 ? (
+                    )) : null}
+                    {!localLoading && localFiltered.length === 0 ? (
                       <Typography variant="body2" color="text.secondary">
                         지자체 연구기관 데이터가 없습니다.
                       </Typography>

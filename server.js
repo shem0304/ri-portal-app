@@ -1314,7 +1314,12 @@ async function loadNationalBuckets() {
 
       const items = Array.isArray(parsed)
         ? parsed
-        : (Array.isArray(parsed?.items) ? parsed.items : [...nrc, ...nct]);
+        : (Array.isArray(parsed?.items)
+            ? parsed.items
+            : [
+                ...nrc.map((it) => ({ ...it, group: it.group || it.category || it.type || "NRC" })),
+                ...nct.map((it) => ({ ...it, group: it.group || it.category || it.type || "NCT" })),
+              ]);
 
       return {
         updated_at: parsed?.updated_at ?? null,
@@ -1395,7 +1400,7 @@ app.get("/api/institutes/national", async (req, res) => {
 app.get("/api/institutes/national/nrc", async (req, res) => {
   try {
     const data = await loadNationalBuckets();
-    return res.json({ items: data.nrc || [] });
+    return res.json({ items: (data.nrc || []).map((it) => ({ ...it, group: it.group || it.category || it.type || "NRC" })) });
   } catch (e) {
     console.error("Failed to load NRC institutes:", e?.message || e);
     return res.status(502).json({ error: "Failed to load NRC institutes", items: [] });
@@ -1405,7 +1410,7 @@ app.get("/api/institutes/national/nrc", async (req, res) => {
 app.get("/api/institutes/national/nct", async (req, res) => {
   try {
     const data = await loadNationalBuckets();
-    return res.json({ items: data.nct || [] });
+    return res.json({ items: (data.nct || []).map((it) => ({ ...it, group: it.group || it.category || it.type || "NCT" })) || [] });
   } catch (e) {
     console.error("Failed to load NCT institutes:", e?.message || e);
     return res.status(502).json({ error: "Failed to load NCT institutes", items: [] });
