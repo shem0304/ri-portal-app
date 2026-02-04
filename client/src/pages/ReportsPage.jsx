@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Box, Button, Card, CardContent, Chip, Divider, Grid, MenuItem, Pagination, Select,
+  Box, Button, Card, CardContent, Divider, MenuItem, Pagination, Select,
   Stack, TextField, Typography, Link
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
@@ -8,21 +8,111 @@ import { useLocation } from 'react-router-dom';
 import { apiFetch } from '../api';
 
 function ReportCard({ item }) {
+  const year = item?.year ?? '';
+  const inst = item?.institute ?? '';
+  const scopeLabel = item?.scope === 'local' ? '지자체' : item?.scope === 'national' ? '정부출연' : '';
+  const metaParts = [year, inst, scopeLabel].filter(Boolean);
+
   return (
-    <Card variant='outlined' sx={{ borderRadius: 3 }}>
-      <CardContent>
-        <Typography variant='subtitle1' sx={{ fontWeight: 700 }}>{item.title}</Typography>
-        <Stack direction='row' spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
-          <Chip size='small' label={item.year} />
-          <Chip size='small' label={item.institute} />
-          <Chip size='small' label={item.scope === 'local' ? '지자체' : '정부출연'} />
-        </Stack>
-        {item.authors?.length ? (
-          <Typography variant='body2' color='text.secondary' sx={{ mt: 1 }}>저자: {item.authors.join(', ')}</Typography>
-        ) : null}
-        {item.url ? (
-          <Link href={item.url} target='_blank' rel='noreferrer' sx={{ mt: 1, display: 'inline-block' }}>링크</Link>
-        ) : null}
+    <Card
+      variant='outlined'
+      sx={{
+        borderRadius: 3,
+        height: 220,
+        display: 'flex',
+        flexDirection: 'column',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+      }}
+    >
+      <CardContent
+        sx={{
+          p: 3,
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+          minWidth: 0,
+          '&:last-child': { pb: 3 },
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          {/* 제목: 최대 3줄 */}
+          <Typography
+            sx={{
+              fontSize: 16,
+              fontWeight: 800,
+              lineHeight: 1.5,
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: 3,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              minHeight: 72,
+              mb: 1.5,
+            }}
+            title={item?.title || ''}
+          >
+            {item?.title || '-'}
+          </Typography>
+
+          {/* 메타 */}
+          <Typography
+            variant='body2'
+            color='text.secondary'
+            sx={{
+              display: 'flex',
+              gap: 2,
+              flexWrap: 'wrap',
+              mb: item?.authors?.length ? 1 : 0,
+            }}
+          >
+            {metaParts.map((t, idx) => (
+              <span key={`${t}-${idx}`}>{t}</span>
+            ))}
+          </Typography>
+
+          {/* 저자 */}
+          {item?.authors?.length ? (
+            <Typography
+              variant='body2'
+              color='text.secondary'
+              sx={{
+                display: '-webkit-box',
+                WebkitBoxOrient: 'vertical',
+                WebkitLineClamp: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+              title={`저자: ${item.authors.join(', ')}`}
+            >
+              저자: {item.authors.join(', ')}
+            </Typography>
+          ) : null}
+        </Box>
+
+        {/* 하단 링크 */}
+        {item?.url ? (
+          <Link
+            href={item.url}
+            target='_blank'
+            rel='noreferrer'
+            underline='hover'
+            sx={{
+              fontSize: 14,
+              fontWeight: 600,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 1,
+              mt: 2,
+            }}
+          >
+            링크 →
+          </Link>
+        ) : (
+          <Typography variant='body2' color='text.secondary' sx={{ mt: 2 }}>
+            링크 없음
+          </Typography>
+        )}
       </CardContent>
     </Card>
   );
@@ -195,13 +285,23 @@ export default function ReportsPage() {
           <Typography variant='caption' color='text.secondary'>검색 결과: {meta.total}건</Typography>
           <Divider sx={{ my: 2 }} />
 
-          <Grid container spacing={2}>
-            {items.map(it => (
-              <Grid item xs={12} md={6} key={`${it.scope}-${it.id}`}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+              columnGap: 3,
+              rowGap: 7,
+              py: 4,
+              mt: 3,
+              mb: 4,
+            }}
+          >
+            {items.map((it) => (
+              <Box key={`${it.scope}-${it.id}`} sx={{ minWidth: 0 }}>
                 <ReportCard item={it} />
-              </Grid>
+              </Box>
             ))}
-          </Grid>
+          </Box>
 
           <Stack direction='row' justifyContent='center' sx={{ mt: 3 }}>
             <Pagination count={totalPages} page={page} onChange={(_, p) => load({ offset: (p - 1) * meta.limit })} />
