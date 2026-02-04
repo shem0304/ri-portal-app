@@ -1,36 +1,49 @@
 import React from 'react';
 import {
   Accordion, AccordionDetails, AccordionSummary,
-  Box, Button, Card, CardContent, Chip, Divider, Link, MenuItem,
-  Pagination, Select, Stack, TextField, Typography
+  Box, Button, Card, CardContent, Chip, Divider, Grid, Link, LinearProgress, MenuItem,
+  Pagination, Select, Stack, TextField, Tooltip, Typography
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { apiFetch } from '../api';
 import { useNavigate } from 'react-router-dom';
 
-function ResearcherCard({ item, currentScope = 'all', currentInstitute = '' }) {
+function normalizeConfidenceToPct(conf) {
+  if (conf === null || conf === undefined || Number.isNaN(conf)) return null;
+  let c = Number(conf);
+  // Accept both 0..1 and 0..100 inputs
+  if (c > 1 && c <= 100) c = c / 100;
+  // If some upstream score leaked in (e.g., 0..N), clamp to [0,1]
+  c = Math.max(0, Math.min(1, c));
+  return Math.round(c * 100);
+}
+
+function ResearcherCard({ item, highlightKeywords = [], currentScope = 'all', currentInstitute = '' }) {
+  // NOTE: 이 컴포넌트는 “연구자 카드”를 메인 카드형 리스트 UI로 렌더링합니다.
+  // 요청에 따라 (1) 키워드/최근 3건 리스트/버튼 컬럼을 제거하고
+  // (2) 제목(연구자명) + 메타(연도/기관/구분) + 링크(→)의 단순 카드로 통일합니다.
+  const match = item.match || null;
+  const confPct = match ? normalizeConfidenceToPct(match.confidence) : null;
+
   // Prefer single institute object from server; fall back to legacy shapes.
   const instName =
     item?.institute?.name ||
     item?.instituteName ||
     (Array.isArray(item?.institutes) ? item.institutes[0] : '') ||
     '';
-
-  const scopeLabel = item?.scope === 'local' ? '지자체' : item?.scope === 'national' ? '정부출연' : '';
-  const year = item?.lastActiveYear || '';
-  const matchPct = Math.round(((item?.match?.confidence || 0) * 100));
-
-  // Institute link: prefer institute.url, fall back to instituteUrl, then instituteLinks[0].url
+  // Render(프로덕션) 서버는 instituteLinks 형태로 내려올 수 있어 하위호환 처리
   const instUrl =
     item?.institute?.url ||
     item?.instituteUrl ||
-    (Array.isArray(item?.instituteLinks) ? item.instituteLinks.find((x) => x?.name === instName)?.url || item.instituteLinks[0]?.url : null);
-
+    (Array.isArray(item?.instituteLinks)
+      ? (item.instituteLinks.find((x) => String(x?.name || '').trim() === String(instName).trim())?.url || '')
+      : '') ||
+    '';
   const navigate = useNavigate();
 
-  const handleLinkClick = React.useCallback((e) => {
-    e.preventDefault();
+  const handleReportsClick = React.useCallback(() => {
     const params = new URLSearchParams();
     const name = String(item?.name || '').trim();
     if (name) params.set('q', name);
@@ -44,148 +57,85 @@ function ResearcherCard({ item, currentScope = 'all', currentInstitute = '' }) {
     <Card
       variant='outlined'
       sx={{
-        borderRadius: 3,
-        p: 3,
+        borderRadius: 4,
+        width: '100%',
         height: '100%',
+        minWidth: 0,
+        maxWidth: '100%',
+        overflow: 'hidden',
+        // 스크린샷처럼 카드 높이를 일정하게
+        minHeight: 240,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'stretch',
-        minWidth: 0,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+        justifyContent: 'space-between',
+        // 살짝 떠 보이는 느낌
+        boxShadow: '0 6px 18px rgba(0,0,0,0.08)',
+        borderColor: 'rgba(0,0,0,0.08)',
       }}
     >
-      {/* Header: 이름 · 기관 + 우측 칩 */}
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, minWidth: 0 }}>
-        <Box sx={{ minWidth: 0 }}>
-          <Typography
-            sx={{
-              fontSize: 22,
-              fontWeight: 900,
-              lineHeight: 1.2,
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 1,
-              minWidth: 0,
-            }}
-          >
-            <span style={{ whiteSpace: 'nowrap' }}>{item?.name || '-'}</span>
-            {instName ? (
-              instUrl ? (
-                <Link
-                  href={instUrl}
-                  target='_blank'
-                  rel='noopener noreferrer'
-                  underline='hover'
-                  sx={{ fontSize: 20, fontWeight: 800 }}
-                >
-                  {instName}
-                </Link>
-              ) : (
-                <span style={{ fontSize: 20, fontWeight: 800 }}>{instName}</span>
-              )
-            ) : null}
-          </Typography>
-        </Box>
-
-        <Stack direction='row' spacing={1} sx={{ flexShrink: 0, pt: 0.25 }}>
-          <Chip size='small' label={`AI 매칭 ${matchPct}%`} />
-          {year ? <Chip size='small' label={`최근 ${year}`} /> : null}
-        </Stack>
-      </Box>
-
-      {/* progress line (AI 매칭 비율 반영) */}
-      <Box
-        sx={{
-          mt: 1.75,
-          mb: 1.75,
-          height: 4,
-          borderRadius: 999,
-          background: '#e3f2fd',
-          overflow: 'hidden',
-        }}
-      >
-        <Box
+      <CardContent sx={{ position: 'relative', p: 4, flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+        {/* Title */}
+        <Typography
+          variant='h6'
           sx={{
-            height: '100%',
-            width: `${Math.max(0, Math.min(100, matchPct))}%`,
-            background: 'linear-gradient(90deg, #1565c0, #90caf9)',
+            fontWeight: 900,
+            lineHeight: 1.25,
+            minWidth: 0,
+            // 제목이 길면 2줄까지
+            display: '-webkit-box',
+            WebkitBoxOrient: 'vertical',
+            WebkitLineClamp: 2,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
           }}
-        />
-      </Box>
+          title={item?.name || ''}
+        >
+          {item?.name || ''}
+        </Typography>
 
-      {/* Summary line */}
-      <Typography variant='body2' color='text.secondary' sx={{ mb: 2 }}>
-        {(item?.match?.reasons || []).join(' · ') || '성과(보고서) 다수'}
-      </Typography>
-
-      {/* Keywords */}
-      {(item?.keywords || []).length ? (
-        <Stack direction='row' spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1.5, mb: 2.25 }}>
-          {item.keywords.slice(0, 12).map((k) => (
-            <Chip key={k} size='small' variant='outlined' label={k} />
-          ))}
+        {/* Meta (연도/기관/구분) */}
+        <Stack direction='row' spacing={2} sx={{ mt: 2, color: 'text.secondary', fontWeight: 600, flexWrap: 'wrap' }}>
+          <Typography variant='body2' color='text.secondary'>
+            {item?.lastActiveYear || ''}
+          </Typography>
+          <Typography variant='body2' color='text.secondary'>
+            {instName || ''}
+          </Typography>
+          <Typography variant='body2' color='text.secondary'>
+            {item?.scope === 'local' ? '지자체' : item?.scope === 'national' ? '정부출연' : ''}
+          </Typography>
         </Stack>
-      ) : null}
 
-      {/* Counts */}
-      <Stack direction='row' spacing={1} sx={{ flexWrap: 'wrap', rowGap: 1.5, mb: 3 }}>
-        <Chip
-          size='small'
-          variant='outlined'
-          label={`보고서 ${(item?.reportCount || 0)}건`}
-          clickable
-          onClick={handleLinkClick}
-        />
-        {scopeLabel ? <Chip size='small' variant='outlined' label={scopeLabel} /> : null}
-      </Stack>
+        {/* Spacer */}
+        <Box sx={{ flex: 1 }} />
 
-      {/* Recent reports */}
-      <Typography variant='subtitle2' sx={{ fontWeight: 900, mb: 1.5 }}>
-        연구보고서 (최근 3건)
-      </Typography>
+        {/* Link */}
+        <Link
+          component='button'
+          underline='none'
+          onClick={handleReportsClick}
+          sx={{
+            alignSelf: 'flex-start',
+            fontWeight: 800,
+            color: 'primary.main',
+            fontSize: 18,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
+          링크 <span aria-hidden>→</span>
+        </Link>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
-        {(item?.recentReports || []).slice(0, 3).map((r) => (
-          <Box
-            key={r.id || `${r.year}-${r.title}`}
-            sx={{
-              width: '100%',
-              minWidth: 0,
-              display: 'grid',
-              gridTemplateColumns: 'minmax(0, 1fr) 96px',
-              alignItems: 'center',
-              columnGap: 1.5,
-              py: 0.25,
-            }}
-          >
-            <Typography
-              sx={{
-                fontWeight: 900,
-                fontSize: 18,
-                lineHeight: 1.35,
-                minWidth: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-              title={r.title}
-            >
-              [{r.year || ''}] {r.title}
-            </Typography>
-
-            <Button
-              variant='outlined'
-              size='small'
-              href={r.url || '#'}
-              target='_blank'
-              rel='noopener noreferrer'
-              sx={{ justifySelf: 'end', minWidth: 96 }}
-            >
-              열기
-            </Button>
-          </Box>
-        ))}
-      </Box>
+        {/* (선택) AI매칭 배지는 유지하되, 카드 상단을 어지럽히지 않게 숨김 처리 가능 */}
+        {confPct !== null ? (
+          <Tooltip title='AI 매칭 점수(전문분야·최근성·성과·협업신호 결합)'>
+            <Box sx={{ position: 'absolute', top: 14, right: 18, opacity: 0.9 }}>
+              <Chip size='small' label={`AI 매칭 ${confPct}%`} />
+            </Box>
+          </Tooltip>
+        ) : null}
+      </CardContent>
     </Card>
   );
 }
@@ -323,32 +273,28 @@ export default function ResearchersPage() {
           <Typography variant='caption' color='text.secondary'>검색 결과: {meta.total}명</Typography>
           <Divider sx={{ my: 2 }} />
 
-
-          {/*
-            규칙적인 카드 레이아웃(업로드한 예시 HTML과 동일한 방식):
-            - auto-fill + minmax 기반 CSS grid
-            - 카드 높이/패딩 통일
-          */}
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-              columnGap: 3,
-              rowGap: 7,
-              py: 4,
-              mt: 3,
-              mb: 4,
-            }}
-          >
+	          <Grid container spacing={3} alignItems='stretch'>
             {items.map((it) => (
-              <ResearcherCard
+              <Grid
+                item
+                // ✅ 카드 '가로 폭'이 제각각으로 보이지 않도록
+                // 화면 크기별 컬럼 수를 명시적으로 고정합니다.
+                // - xs(모바일): 1열
+                // - sm(태블릿): 2열
+                // - md(노트북): 3열
+                // - lg+(대화면): 3열
+                xs={12}
+                sm={6}
+                md={4}
+	              lg={4}
+	                // minWidth:0 is important so long titles don't push the grid item wider than its breakpoint width
+	                sx={{ display: 'flex', minWidth: 0 }}
                 key={it.id || `${it.name}-${it?.institute?.name || it?.instituteName || (Array.isArray(it?.institutes) ? it.institutes[0] : '-')}`}
-                item={it}
-                currentScope={scope}
-                currentInstitute={institute}
-              />
+              >
+                <ResearcherCard item={it} highlightKeywords={(queryInfo.tokens || []).map(t => String(t).toLowerCase())} currentScope={scope} currentInstitute={institute} />
+              </Grid>
             ))}
-          </Box>
+          </Grid>
 
           <Stack direction='row' justifyContent='center' sx={{ mt: 3 }}>
             <Pagination count={totalPages} page={page} onChange={(_, p) => load({ offset: (p - 1) * meta.limit })} />
