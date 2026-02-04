@@ -1,6 +1,6 @@
 import React from 'react';
 import {
-  Box, Card, CardActions, CardContent, Chip, Grid, Link, MenuItem, Select, TextField, Typography, Button, Stack,  Divider
+  Box, Card, CardContent, Grid, Link, MenuItem, Select, TextField, Typography, Button, Stack, Divider
 } from '@mui/material';
 import { apiFetch } from '../api';
 
@@ -17,8 +17,29 @@ function normalizeItems(payload) {
   return [];
 }
 
-function InstituteCard({ name, region, url, scope }) {
+
+function breakTitleByLength(title, maxLen = 50) {
+  if (!title) return '';
+  const t = String(title).trim();
+  if (t.length <= maxLen) return t;
+
+  // Prefer breaking at a space near maxLen for nicer wrapping
+  const left = t.lastIndexOf(' ', maxLen);
+  const right = t.indexOf(' ', maxLen + 1);
+  const cut =
+    left >= Math.floor(maxLen * 0.6)
+      ? left
+      : (right !== -1 && right <= maxLen + 12 ? right : maxLen);
+
+  return t.slice(0, cut).trimEnd() + '\n' + t.slice(cut).trimStart();
+}
+
+
+function InstituteCard({ name, region, group, url, scope }) {
+  // Avoid duplicated labels like "정부출연 정부출연".
+  // For national institutes, show NRC/NCT (group) instead of repeating the same word twice.
   const scopeLabel = scope === 'local' ? '지자체' : scope === 'national' ? '정부출연' : '';
+  const leftLabel = scope === 'national' ? (group || '') : (region || '전체');
   return (
     <Card
       variant="outlined"
@@ -73,7 +94,7 @@ function InstituteCard({ name, region, url, scope }) {
       </Box>
 
       <Box sx={{ display: 'flex', gap: 1.5, color: 'text.secondary', fontSize: 14 }}>
-        <span>{region || '전체'}</span>
+        {leftLabel ? <span>{leftLabel}</span> : null}
         {scopeLabel ? <span>{scopeLabel}</span> : null}
       </Box>
     </Card>
@@ -127,7 +148,13 @@ React.useEffect(() => {
               : '/api/institutes/national');
 
     const data = await apiFetch(endpoint);
-    setNational(normalizeItems(data));
+    const items = normalizeItems(data);
+    // Some endpoints return items without explicit group info.
+    // When user selected NRC/NCT, stamp the group so the card can show it.
+    const stamped = (nationalGroup === 'NRC' || nationalGroup === 'NCT')
+      ? items.map((it) => ({ ...it, group: it.group || it.category || it.type || nationalGroup }))
+      : items;
+    setNational(stamped);
   })();
 }, [scope, nationalGroup]);
 
@@ -153,8 +180,9 @@ React.useEffect(() => {
     if (scope === 'all' || scope === 'national') {
       // national has group + desc
       for (const i of national) {
-        const region = i.region || i.group || '정부출연';
-        all.push({ ...i, region, scope: 'national' });
+        const group = i.group || i.category || i.type || '';
+        const region = i.region || '';
+        all.push({ ...i, group, region, scope: 'national' });
       }
 }
     return all;
@@ -218,8 +246,8 @@ React.useEffect(() => {
               onClick={() => it.link && window.open(it.link, '_blank', 'noopener,noreferrer')}
             >
               <CardContent sx={{ py: 1.5 }}>
-                <Typography sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                  {it.title}
+                <Typography sx={{ fontWeight: 700, whiteSpace: 'pre-line', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                  {breakTitleByLength(it.title, 50)}
                 </Typography>
               </CardContent>
             </Card>
@@ -263,8 +291,8 @@ React.useEffect(() => {
               onClick={() => it.link && window.open(it.link, '_blank', 'noopener,noreferrer')}
             >
               <CardContent sx={{ py: 1.5 }}>
-                <Typography sx={{ fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                  {it.title}
+                <Typography sx={{ fontWeight: 700, whiteSpace: 'pre-line', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                  {breakTitleByLength(it.title, 50)}
                 </Typography>
               </CardContent>
             </Card>
@@ -312,20 +340,7 @@ React.useEffect(() => {
                 )}
               </Stack>
 
-              {scope === 'national' ? null : (
-              <Stack direction='row' spacing={1} sx={{ flexWrap: 'wrap', mb: 2 }}>
-                {regions.slice(0, 12).map(r => (
-                  <Chip
-                    key={r}
-                    label={r}
-                    clickable
-                    onClick={() => setRegion(r)}
-                    color={region === r ? 'primary' : 'default'}
-                    sx={{ mb: 1 }}
-                  />
-                ))}
-              </Stack>
-            )}
+              {/* 지역 퀵필터(전체, 서울, 경기...) 버튼은 제거 (요청사항) */}
 
               <Typography variant='caption' color='text.secondary'>기관 데이터는 local_institutes.json(지자체), national_institutes.json(정부출연)에서 로딩합니다.</Typography>
               <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>현재 {filtered.length}개</Typography>
