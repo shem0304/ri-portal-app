@@ -57,14 +57,19 @@ function ResearcherCard({ item, highlightKeywords = [], currentScope = 'all', cu
       variant='outlined'
       sx={{
         borderRadius: 3,
+        width: '100%',
         height: '100%',
+        // Prevent long text (e.g., report titles) from forcing Grid items to expand
+        minWidth: 0,
+        maxWidth: '100%',
+        overflow: 'hidden',
         minHeight: 380,
         display: 'flex',
         flexDirection: 'column',
         flex: 1,
       }}
     >
-      <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+      <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'stretch', minWidth: 0 }}>
         <Stack direction='row' spacing={1} alignItems='center' sx={{ mb: 0.5, flexWrap: 'wrap' }}>
           <Typography variant='subtitle1' sx={{ fontWeight: 800, lineHeight: 1.2 }}>
             {item.name}
@@ -153,8 +158,7 @@ function ResearcherCard({ item, highlightKeywords = [], currentScope = 'all', cu
           ) : null}
         </Stack>
 
-        {/* 카드 높이를 일정하게 유지하기 위한 여백 */}
-        <Box sx={{ flexGrow: 1 }} />
+        {/* 카드 높이는 minHeight로 통일하고, 섹션 사이 불필요한 공백은 최소화 */}
 
         {(() => {
           const raw = Array.isArray(item.recentReports) ? item.recentReports : [];
@@ -167,44 +171,90 @@ function ResearcherCard({ item, highlightKeywords = [], currentScope = 'all', cu
             uniq.push(r);
             if (uniq.length >= 3) break;
           }
+
           return uniq.length ? (
-          <Box sx={{ mt: 'auto', pt: 1.5 }}>
+          <Box sx={{ mt: 1.25 }}>
             <Stack direction='row' alignItems='center' justifyContent='space-between' sx={{ mb: 0.5 }}>
               <Typography variant='caption' color='text.secondary'>연구보고서 (최근 3건)</Typography>
             </Stack>
 
-            <Stack spacing={0.75}>
+            {/*
+              NOTE: 카드 폭이 들쭉날쭉해 보이는 원인은 긴 텍스트가 flex item의 최소 너비를 밀어내는 경우가 많습니다.
+              각 행을 "1fr(제목) + 고정 액션 컬럼" grid로 고정해, 버튼 컬럼 시작점과 간격을 항상 동일하게 유지합니다.
+            */}
+            {/* Stretch children so each row takes the full card width */}
+            <Stack spacing={0.75} sx={{ alignItems: 'stretch', width: '100%' }}>
               {uniq.map((r) => (
-                <Stack key={r.id} direction='row' spacing={1} alignItems='center' justifyContent='space-between'>
+                <Box
+                  key={r.id}
+                  sx={{
+                    width: '100%',
+                    minWidth: 0,
+                    display: 'grid',
+                    // 1fr(제목) + 고정 액션 컬럼(버튼)
+                    gridTemplateColumns: 'minmax(0, 1fr) 112px',
+                    columnGap: 1.5,
+                    alignItems: 'start',
+                  }}
+                >
                   <Typography
                     variant='body2'
+                    component='div'
                     sx={{
                       fontWeight: 650,
+                      lineHeight: 1.3,
+                      // Grid/Flex 환경에서 텍스트가 폭을 밀어내지 않도록
+                      minWidth: 0,
+                      width: '100%',
+                      maxWidth: '100%',
+                      // ✅ 프로덕션에서 white-space: nowrap 류가 덮어써져 줄바꿈이 막히는 케이스 방지
+                      whiteSpace: 'normal !important',
+                      // ✅ 한글/영문 혼합 긴 제목도 강제로 줄바꿈
+                      wordBreak: 'break-all',
+                      overflowWrap: 'anywhere',
+                      // ✅ 최대 2줄까지만 표시(브라우저 호환 위해 Webkit + 표준 속성 동시 적용)
+                      display: '-webkit-box',
+                      WebkitBoxOrient: 'vertical',
+                      WebkitLineClamp: 2,
+                      lineClamp: 2,
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                      pr: 1,
-                      flex: 1,
+                      // 2줄 높이 확보(행 간 카드 레이아웃 흔들림 방지)
+                      minHeight: '2.6em',
                     }}
                     title={`${r.year ? `[${r.year}] ` : ''}${r.title}`}
                   >
-                    {r.year ? `[${r.year}] ` : ''}{r.title}
+                    {`${r.year ? `[${r.year}] ` : ''}${r.title || ''}`.trim()}
                   </Typography>
 
-                  <Button
-                    size='small'
-                    variant='outlined'
-                    endIcon={<OpenInNewIcon fontSize='small' />}
-                    component='a'
-                    href={r.url || '#'}
-                    target='_blank'
-                    rel='noreferrer'
-                    disabled={!r.url}
-                    sx={{ whiteSpace: 'nowrap' }}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      justifySelf: 'end',
+                      width: 112,
+                      minWidth: 112,
+                    }}
                   >
-                    열기
-                  </Button>
-                </Stack>
+                    <Button
+                      size='small'
+                      variant='outlined'
+                      endIcon={<OpenInNewIcon fontSize='small' />}
+                      component='a'
+                      href={r.url || '#'}
+                      target='_blank'
+                      rel='noreferrer'
+                      disabled={!r.url}
+                      sx={{
+                        whiteSpace: 'nowrap',
+                        width: '100%',
+                        minWidth: 0,
+                      }}
+                    >
+                      열기
+                    </Button>
+                  </Box>
+                </Box>
               ))}
             </Stack>
           </Box>
@@ -348,14 +398,22 @@ export default function ResearchersPage() {
           <Typography variant='caption' color='text.secondary'>검색 결과: {meta.total}명</Typography>
           <Divider sx={{ my: 2 }} />
 
-          <Grid container spacing={2}>
+	          <Grid container spacing={2} alignItems='stretch'>
             {items.map((it) => (
               <Grid
                 item
+                // ✅ 카드 '가로 폭'이 제각각으로 보이지 않도록
+                // 화면 크기별 컬럼 수를 명시적으로 고정합니다.
+                // - xs(모바일): 1열
+                // - sm(태블릿): 2열
+                // - md(노트북): 3열
+                // - lg+(대화면): 4열
                 xs={12}
-                md={6}
-                lg={4}
-                sx={{ display: 'flex' }}
+                sm={6}
+                md={4}
+                lg={3}
+	                // minWidth:0 is important so long titles don't push the grid item wider than its breakpoint width
+	                sx={{ display: 'flex', minWidth: 0 }}
                 key={it.id || `${it.name}-${it?.institute?.name || it?.instituteName || (Array.isArray(it?.institutes) ? it.institutes[0] : '-')}`}
               >
                 <ResearcherCard item={it} highlightKeywords={(queryInfo.tokens || []).map(t => String(t).toLowerCase())} currentScope={scope} currentInstitute={institute} />
