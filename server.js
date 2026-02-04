@@ -66,6 +66,17 @@ const DATA_DIR_CANDIDATES = [
 
 const DATA_DIR = DATA_DIR_CANDIDATES.find((d) => ensureWritableDir(d)) || path.resolve(__dirname, "server", "data");
 
+// Prefer reading bundled seed data when DATA_DIR points to an empty writable location (common on Render).
+const BUNDLED_DATA_DIR = path.resolve(__dirname, "server", "data");
+function resolveDataFile(filename) {
+  const inDataDir = path.join(DATA_DIR, filename);
+  if (fs.existsSync(inDataDir)) return inDataDir;
+  const bundled = path.join(BUNDLED_DATA_DIR, filename);
+  if (fs.existsSync(bundled)) return bundled;
+  return inDataDir; // fallback
+}
+
+
 
 
 // -----------------------------
@@ -105,8 +116,8 @@ const cacheSet = (key, value) => {
 };
 
 // Reports are large; load once.
-const LOCAL_REPORTS_PATH = path.join(DATA_DIR, "local_reports.json");
-const NATIONAL_REPORTS_PATH = path.join(DATA_DIR, "national_reports.json");
+const LOCAL_REPORTS_PATH = resolveDataFile("local_reports.json");
+const NATIONAL_REPORTS_PATH = resolveDataFile("national_reports.json");
 const LOCAL_REPORTS = fs.existsSync(LOCAL_REPORTS_PATH)
   ? readJson(LOCAL_REPORTS_PATH).map((r) => ({ ...r, __scope: 'local' }))
   : [];
@@ -115,8 +126,8 @@ const NATIONAL_REPORTS = fs.existsSync(NATIONAL_REPORTS_PATH)
   : [];
 
 // Institutes (for external homepage links)
-const LOCAL_INSTITUTES_PATH = path.join(DATA_DIR, "local_institutes.json");
-const NATIONAL_INSTITUTES_PATH = path.join(DATA_DIR, "national_institutes.json");
+const LOCAL_INSTITUTES_PATH = resolveDataFile("local_institutes.json");
+const NATIONAL_INSTITUTES_PATH = resolveDataFile("national_institutes.json");
 const LOCAL_INSTITUTES = fs.existsSync(LOCAL_INSTITUTES_PATH) ? readJson(LOCAL_INSTITUTES_PATH) : [];
 
 function flattenNationalInstitutes(raw) {
@@ -1266,7 +1277,7 @@ app.put("/api/admin/stopwords", authRequired, adminRequired, async (req, res) =>
 // Static data APIs
 // -----------------------------
 app.get("/api/institutes/local", (req, res) => {
-  const p = path.join(DATA_DIR, "local_institutes.json");
+  const p = resolveDataFile("local_institutes.json");
   return res.json(fs.existsSync(p) ? readJson(p) : []);
 });
 

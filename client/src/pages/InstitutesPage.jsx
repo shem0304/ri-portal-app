@@ -2,7 +2,6 @@ import React from 'react';
 import {
   Box, Card, CardActions, CardContent, Chip, Grid, Link, MenuItem, Select, TextField, Typography, Button, Stack,  Divider
 } from '@mui/material';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { apiFetch } from '../api';
 
 // Accept common API shapes:
@@ -18,23 +17,65 @@ function normalizeItems(payload) {
   return [];
 }
 
-function InstituteCard({ name, region, url, desc }) {
+function InstituteCard({ name, region, url, scope }) {
+  const scopeLabel = scope === 'local' ? '지자체' : scope === 'national' ? '정부출연' : '';
   return (
-    <Card variant='outlined' sx={{ borderRadius: 3 }}>
-      <CardContent>
-        <Typography variant='h6' sx={{ fontWeight: 700 }}>{name}</Typography>
-        <Typography variant='body2' color='text.secondary'>{region}</Typography>
-        {desc ? <Typography variant='body2' sx={{ mt: 1 }}>{desc}</Typography> : null}
+    <Card
+      variant="outlined"
+      sx={{
+        borderRadius: 3,
+        p: 2,
+        height: 160,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.25,
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        overflow: 'hidden',
+        minWidth: 0,
+      }}
+    >
+      <Box sx={{ minWidth: 0 }}>
         {url ? (
-          <Link href={url} target='_blank' rel='noreferrer' sx={{ mt: 1, display: 'inline-block' }}>{url}</Link>
-        ) : null}
-      </CardContent>
-      <CardActions sx={{ px: 2, pb: 2 }}>
-        {url ? (
-          <Button size='small' variant='contained' endIcon={<OpenInNewIcon />} href={url} target='_blank' rel='noreferrer'>열기</Button>
-        ) : null}
-        {region ? <Chip size='small' label={region} /> : null}
-      </CardActions>
+          <Link href={url} target="_blank" rel="noreferrer" underline="hover">
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 800,
+                lineHeight: 1.4,
+                display: '-webkit-box',
+                WebkitBoxOrient: 'vertical',
+                WebkitLineClamp: 2,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                minHeight: 44,
+              }}
+            >
+              {name}
+            </Typography>
+          </Link>
+        ) : (
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: 800,
+              lineHeight: 1.4,
+              display: '-webkit-box',
+              WebkitBoxOrient: 'vertical',
+              WebkitLineClamp: 2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              minHeight: 44,
+            }}
+          >
+            {name}
+          </Typography>
+        )}
+      </Box>
+
+      <Box sx={{ display: 'flex', gap: 1.5, color: 'text.secondary', fontSize: 14 }}>
+        <span>{region || '전체'}</span>
+        {scopeLabel ? <span>{scopeLabel}</span> : null}
+      </Box>
     </Card>
   );
 }
@@ -121,15 +162,27 @@ React.useEffect(() => {
 
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
+
+
     return merged.filter(it => {
       if (region !== '전체' && it.scope === 'local' && it.region !== region) return false;
       if (q) {
-        const hay = `${it.name} ${it.region} ${it.desc || ''}`.toLowerCase();
+        const hay = `${it.name} ${it.region || ''} ${it.homepage || it.url || ''}`.toLowerCase();
         return hay.includes(q);
       }
       return true;
     });
   }, [merged, query, region]);
+
+  const localFiltered = React.useMemo(
+    () => filtered.filter((it) => it.scope === 'local'),
+    [filtered]
+  );
+  const nationalFiltered = React.useMemo(
+    () => filtered.filter((it) => it.scope === 'national'),
+    [filtered]
+  );
+
 
   return (
     <Box>
@@ -277,13 +330,69 @@ React.useEffect(() => {
               <Typography variant='caption' color='text.secondary'>기관 데이터는 local_institutes.json(지자체), national_institutes.json(정부출연)에서 로딩합니다.</Typography>
               <Typography variant='caption' color='text.secondary' sx={{ display: 'block' }}>현재 {filtered.length}개</Typography>
 
-              <Grid container spacing={2} sx={{ mt: 0.5 }}>
-                {filtered.map((it) => (
-                  <Grid key={`${it.scope}-${it.name}`} item xs={12} sm={6}>
-                    <InstituteCard {...it} />
-                  </Grid>
-                ))}
-              </Grid>
+              {/* 초기 진입(전체)에서는 지자체 → 정부출연 순서로 노출 */}
+              {scope === 'all' ? (
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 900, mb: 1 }}>
+                    지자체 연구기관
+                  </Typography>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+                      columnGap: 3,
+                      rowGap: 7,
+                      py: 2,
+                    }}
+                  >
+                    {localFiltered.map((it) => (
+                      <InstituteCard key={`local-${it.name}`} {...it} />
+                    ))}
+                    {localFiltered.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        지자체 연구기관 데이터가 없습니다.
+                      </Typography>
+                    ) : null}
+                  </Box>
+
+                  <Typography variant="subtitle1" sx={{ fontWeight: 900, mt: 3, mb: 1 }}>
+                    정부출연기관
+                  </Typography>
+                  <Box
+                    sx={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+                      columnGap: 3,
+                      rowGap: 7,
+                      py: 2,
+                    }}
+                  >
+                    {nationalFiltered.map((it) => (
+                      <InstituteCard key={`national-${it.name}`} {...it} />
+                    ))}
+                    {nationalFiltered.length === 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        정부출연기관 데이터가 없습니다.
+                      </Typography>
+                    ) : null}
+                  </Box>
+                </Box>
+              ) : (
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
+                    columnGap: 3,
+                    rowGap: 7,
+                    mt: 2,
+                    py: 2,
+                  }}
+                >
+                  {(scope === 'local' ? localFiltered : nationalFiltered).map((it) => (
+                    <InstituteCard key={`${it.scope}-${it.name}`} {...it} />
+                  ))}
+                </Box>
+              )}
             </Grid>
           </Grid>
         </CardContent>
