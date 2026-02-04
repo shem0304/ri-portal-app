@@ -32,6 +32,18 @@ export function loadDataStore() {
     }
   }
 
+  // Quick lookup maps for institute homepage links.
+  const localInstituteByName = new Map(
+    (Array.isArray(localInstitutes) ? localInstitutes : [])
+      .filter((x) => x && x.name)
+      .map((x) => [String(x.name).trim(), x])
+  );
+  const nationalInstituteByName = new Map(
+    (Array.isArray(nationalInstitutes) ? nationalInstitutes : [])
+      .filter((x) => x && x.name)
+      .map((x) => [String(x.name).trim(), x])
+  );
+
   const allReports = [...localReports.map(r => ({ ...r, scope: 'local' })), ...nationalReports.map(r => ({ ...r, scope: 'national' }))];
 
   // Basic indices
@@ -73,11 +85,13 @@ export function loadDataStore() {
 
   return {
     localInstitutes,
+    localInstituteByName,
     nationalInstitutesMeta: {
       updated_at: nationalInstitutesRaw.updated_at,
       sources: nationalInstitutesRaw.sources,
     },
     nationalInstitutes,
+    nationalInstituteByName,
     nationalGroupByInstitute,
     localReports,
     nationalReports,

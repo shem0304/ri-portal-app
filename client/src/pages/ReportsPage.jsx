@@ -112,11 +112,11 @@ export default function ReportsPage() {
   }
 
   React.useEffect(() => {
-    // If a deep-link query param exists, let the URL-hydration effect trigger the first load
+    // If deep-link query params exist, let the URL-hydration effect trigger the first load
     // to avoid an initial unfiltered flash.
     const sp = new URLSearchParams(location.search || '');
-    const qp = sp.get('q') || '';
-    if (!hydratedFromUrlRef.current && qp) return;
+    const hasUrlFilters = Boolean(sp.get('q') || sp.get('scope') || sp.get('institute') || sp.get('year'));
+    if (!hydratedFromUrlRef.current && hasUrlFilters) return;
 
     load({ offset: 0 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -125,12 +125,29 @@ export default function ReportsPage() {
   React.useEffect(() => {
     if (hydratedFromUrlRef.current) return;
     const sp = new URLSearchParams(location.search || '');
-    const qp = sp.get('q') || '';
-    if (qp) {
+    const qp = (sp.get('q') || '').trim();
+    const scopeP = (sp.get('scope') || '').trim();
+    const safeScope = (scopeP === 'local' || scopeP === 'national' || scopeP === 'all') ? scopeP : '';
+    const yearP = (sp.get('year') || '').trim();
+    const instP = (sp.get('institute') || '').trim();
+
+    const hasUrlFilters = Boolean(qp || scopeP || yearP || instP);
+    if (hasUrlFilters) {
       hydratedFromUrlRef.current = true;
-      setQ(qp);
-      // Trigger a search with the URL value immediately.
-      load({ offset: 0, qOverride: qp });
+
+      if (qp) setQ(qp);
+      if (safeScope) setScope(safeScope);
+      if (yearP) setYear(yearP);
+      if (instP) setInstitute(instP);
+
+      // Trigger a search with the URL values immediately (without waiting for state flush).
+      load({
+        offset: 0,
+        qOverride: qp,
+        scopeOverride: safeScope || 'all',
+        yearOverride: yearP || '',
+        instituteOverride: instP || '',
+      });
     } else {
       hydratedFromUrlRef.current = true;
     }
@@ -168,7 +185,7 @@ export default function ReportsPage() {
               <MenuItem value=''>연도 전체</MenuItem>
               {yearOptions.map(y => <MenuItem key={y} value={y}>{y}</MenuItem>)}
             </Select>
-            <TextField fullWidth placeholder='검색어(키워드/제목)' value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') load({ offset: 0 }); }} />
+            <TextField fullWidth placeholder='검색어(키워드/제목/연구자)' value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') load({ offset: 0 }); }} />
             <Button variant='contained' endIcon={<OpenInNewIcon />} onClick={() => load({ offset: 0 })} disabled={loading}>검색</Button>
           </Stack>
 

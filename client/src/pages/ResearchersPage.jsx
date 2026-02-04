@@ -8,6 +8,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { apiFetch } from '../api';
+import { useNavigate } from 'react-router-dom';
 
 function normalizeConfidenceToPct(conf) {
   if (conf === null || conf === undefined || Number.isNaN(conf)) return null;
@@ -19,17 +20,72 @@ function normalizeConfidenceToPct(conf) {
   return Math.round(c * 100);
 }
 
-function ResearcherCard({ item, highlightKeywords = [] }) {
+function ResearcherCard({ item, highlightKeywords = [], currentScope = 'all', currentInstitute = '' }) {
   const match = item.match || null;
   const confPct = match ? normalizeConfidenceToPct(match.confidence) : null;
   const reasons = (match?.reasons || []).slice(0, 3);
   const matchedKeywords = (match?.matchedKeywords || []).slice(0, 6);
 
+  // Prefer single institute object from server; fall back to legacy shapes.
+  const instName =
+    item?.institute?.name ||
+    item?.instituteName ||
+    (Array.isArray(item?.institutes) ? item.institutes[0] : '') ||
+    '';
+  const instUrl = item?.institute?.url || item?.instituteUrl || '';
+  const navigate = useNavigate();
+
+  const handleReportsClick = React.useCallback(() => {
+    const params = new URLSearchParams();
+    const name = String(item?.name || '').trim();
+    if (name) params.set('q', name);
+    const s = currentScope || 'all';
+    if (s !== 'all') params.set('scope', s);
+    if (String(currentInstitute || '').trim()) params.set('institute', String(currentInstitute).trim());
+    navigate(`/reports?${params.toString()}`);
+  }, [navigate, item?.name, currentScope, currentInstitute]);
+
   return (
-    <Card variant='outlined' sx={{ borderRadius: 3, height: '100%' }}>
-      <CardContent>
+    <Card
+      variant='outlined'
+      sx={{
+        borderRadius: 3,
+        height: '100%',
+        minHeight: 380,
+        display: 'flex',
+        flexDirection: 'column',
+        flex: 1,
+      }}
+    >
+      <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <Stack direction='row' spacing={1} alignItems='center' sx={{ mb: 0.5, flexWrap: 'wrap' }}>
-          <Typography variant='subtitle1' sx={{ fontWeight: 800, lineHeight: 1.2 }}>{item.name}</Typography>
+          <Typography variant='subtitle1' sx={{ fontWeight: 800, lineHeight: 1.2 }}>
+            {item.name}
+            {instName ? (
+              <>
+                {' '}
+                <Typography component='span' sx={{ fontWeight: 700 }} color='text.secondary'>
+                  ·
+                </Typography>
+                {' '}
+                {instUrl ? (
+                  <Link
+                    href={instUrl}
+                    target='_blank'
+                    rel='noreferrer'
+                    underline='hover'
+                    sx={{ fontWeight: 700 }}
+                  >
+                    {instName}
+                  </Link>
+                ) : (
+                  <Typography component='span' sx={{ fontWeight: 700 }} color='text.secondary'>
+                    {instName}
+                  </Typography>
+                )}
+              </>
+            ) : null}
+          </Typography>
 
           {confPct !== null ? (
             <Tooltip title='전문분야(키워드 프로파일)·최근성·성과·협업신호를 결합해 매칭한 점수입니다.'>
@@ -53,9 +109,7 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
           </Box>
         ) : null}
 
-        <Typography variant='body2' color='text.secondary'>
-          {(item.institutes || []).slice(0, 2).join(' · ') || '소속 정보 없음'}
-        </Typography>
+        {/* 기관명은 카드 상단(이름 옆)에서만 1회 표시 */}
 
         {(matchedKeywords || []).length ? (
           <Stack direction='row' spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
@@ -82,14 +136,18 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
             variant='outlined'
             clickable
             component='a'
-            href={`https://ri-portal-app.onrender.com/reports?q=${encodeURIComponent(item.name || '')}`}
             sx={{ cursor: 'pointer' }}
             label={`보고서 ${item.reportCount || 0}건`}
+            clickable
+            onClick={handleReportsClick}
           />
           {item.scope && item.scope !== 'all' ? (
             <Chip size='small' variant='outlined' label={item.scope === 'local' ? '지자체' : '정부출연'} />
           ) : null}
         </Stack>
+
+        {/* 카드 높이를 일정하게 유지하기 위한 여백 */}
+        <Box sx={{ flexGrow: 1 }} />
 
         {(() => {
           const raw = Array.isArray(item.recentReports) ? item.recentReports : [];
@@ -103,7 +161,7 @@ function ResearcherCard({ item, highlightKeywords = [] }) {
             if (uniq.length >= 3) break;
           }
           return uniq.length ? (
-          <Box sx={{ mt: 1.5 }}>
+          <Box sx={{ mt: 'auto', pt: 1.5 }}>
             <Stack direction='row' alignItems='center' justifyContent='space-between' sx={{ mb: 0.5 }}>
               <Typography variant='caption' color='text.secondary'>연구보고서 (최근 3건)</Typography>
             </Stack>
@@ -285,8 +343,15 @@ export default function ResearchersPage() {
 
           <Grid container spacing={2}>
             {items.map((it) => (
-              <Grid item xs={12} md={6} lg={4} key={it.id || `${it.name}-${(it.institutes || ['-'])[0]}`}> 
-                <ResearcherCard item={it} highlightKeywords={(queryInfo.tokens || []).map(t => String(t).toLowerCase())} />
+              <Grid
+                item
+                xs={12}
+                md={6}
+                lg={4}
+                sx={{ display: 'flex' }}
+                key={it.id || `${it.name}-${it?.institute?.name || it?.instituteName || (Array.isArray(it?.institutes) ? it.institutes[0] : '-')}`}
+              >
+                <ResearcherCard item={it} highlightKeywords={(queryInfo.tokens || []).map(t => String(t).toLowerCase())} currentScope={scope} currentInstitute={institute} />
               </Grid>
             ))}
           </Grid>

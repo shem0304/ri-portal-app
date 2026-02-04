@@ -740,23 +740,39 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
   // For UI: provide suggested keywords (query expansion "to" terms)
   const suggestedKeywords = Array.from(new Set(expansions.map(x => x.to))).slice(0, 8);
 
-  const items = scored.slice(off, off + lim).map(r => ({
-    id: r.id,
-    name: r.name,
-    institutes: r.institutes,
-    reportCount: r.reportCount,
-    lastActiveYear: r.lastActiveYear,
-    scope: r.scope,
-    keywords: r.keywords,
-    recentReports: r.recentReports,
-    match: {
-      similarity: Number((r.__sim || 0).toFixed(4)),
-      coverage: Number((r.__coverage || 0).toFixed(4)),
-      confidence: Number((r.__confidence || 0).toFixed(4)),
-      matchedKeywords: r.__matchedKeywords || [],
-      reasons: r.__reasons || [],
-    },
-  }));
+  const items = scored.slice(off, off + lim).map(r => {
+    // Pick a single "대표 기관" for UI display.
+    // - If institute filter is an exact name and the researcher belongs to it, prefer it.
+    // - Otherwise fall back to the first institute (sorted list).
+    const preferredName = (inst && r?.institutes?.includes(inst)) ? inst : (Array.isArray(r?.institutes) ? (r.institutes[0] || '') : '');
+    const instObj =
+      (store?.localInstituteByName?.get(preferredName) || null) ||
+      (store?.nationalInstituteByName?.get(preferredName) || null);
+    const instUrl = instObj?.url || '';
+
+    return {
+      id: r.id,
+      name: r.name,
+      institutes: r.institutes,
+      // New shape (preferred): UI will render name + link if url exists.
+      institute: preferredName ? { name: preferredName, url: instUrl } : null,
+      // Backward-compatible fields (some older client builds read these).
+      instituteName: preferredName || '',
+      instituteUrl: instUrl || '',
+      reportCount: r.reportCount,
+      lastActiveYear: r.lastActiveYear,
+      scope: r.scope,
+      keywords: r.keywords,
+      recentReports: r.recentReports,
+      match: {
+        similarity: Number((r.__sim || 0).toFixed(4)),
+        coverage: Number((r.__coverage || 0).toFixed(4)),
+        confidence: Number((r.__confidence || 0).toFixed(4)),
+        matchedKeywords: r.__matchedKeywords || [],
+        reasons: r.__reasons || [],
+      },
+    };
+  });
 
   return {
     total,
