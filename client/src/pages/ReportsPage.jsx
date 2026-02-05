@@ -1,17 +1,24 @@
 import React from 'react';
 import {
   Box, Button, Card, CardContent, Divider, MenuItem, Pagination, Select,
-  Stack, TextField, Typography, Link
+  Stack, TextField, Typography
 } from '@mui/material';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useLocation } from 'react-router-dom';
 import { apiFetch } from '../api';
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
 function ReportCard({ item }) {
   const year = item?.year ?? '';
   const inst = item?.institute ?? '';
   const scopeLabel = item?.scope === 'local' ? '지자체' : item?.scope === 'national' ? '정부출연' : '';
   const metaParts = [year, inst, scopeLabel].filter(Boolean);
+  const authorsArr = Array.isArray(item?.authors)
+    ? item.authors
+    : (typeof item?.authors === 'string' && item.authors.trim())
+      ? item.authors.split(/[;,·|/]+/g).map(s => s.trim()).filter(Boolean)
+      : (typeof item?.authorsText === 'string' && item.authorsText.trim())
+        ? item.authorsText.split(/[;,·|/]+/g).map(s => s.trim()).filter(Boolean)
+        : [];
 
   return (
     <Card
@@ -63,7 +70,7 @@ function ReportCard({ item }) {
               display: 'flex',
               gap: 2,
               flexWrap: 'wrap',
-              mb: item?.authors?.length ? 1 : 0,
+              mb: authorsArr.length ? 1 : 0,
             }}
           >
             {metaParts.map((t, idx) => (
@@ -72,7 +79,7 @@ function ReportCard({ item }) {
           </Typography>
 
           {/* 저자 */}
-          {item?.authors?.length ? (
+          {authorsArr.length ? (
             <Typography
               variant='body2'
               color='text.secondary'
@@ -83,31 +90,34 @@ function ReportCard({ item }) {
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
               }}
-              title={`저자: ${item.authors.join(', ')}`}
+              title={`저자: ${authorsArr.join(', ')}`}
             >
-              저자: {item.authors.join(', ')}
+              저자: {authorsArr.join(', ')}
             </Typography>
           ) : null}
         </Box>
 
-        {/* 하단 링크 */}
+        {/* 하단 버튼 */}
         {item?.url ? (
-          <Link
-            href={item.url}
-            target='_blank'
-            rel='noreferrer'
-            underline='hover'
-            sx={{
-              fontSize: 14,
-              fontWeight: 600,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 1,
-              mt: 2,
-            }}
-          >
-            링크 →
-          </Link>
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+            <Button
+              variant='outlined'
+              size='small'
+              component='a'
+              href={item.url}
+              target='_blank'
+              rel='noreferrer'
+              sx={{
+                borderRadius: 1.5,
+                px: 3,
+                py: 1,
+                fontWeight: 800,
+                minWidth: 110,
+              }}
+            >
+              열기
+            </Button>
+          </Box>
         ) : (
           <Typography variant='body2' color='text.secondary' sx={{ mt: 2 }}>
             링크 없음

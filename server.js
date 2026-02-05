@@ -518,6 +518,82 @@ function authorsText(r) {
   return normalizeStr(parts.join(' '));
 }
 
+
+function authorsArray(r) {
+  // Produce a normalized author name array for UI.
+  // Prefer explicit arrays; otherwise split common delimiters.
+  const candidates = [
+    r.authors,
+    r.author,
+    r.writer,
+    r.writers,
+    r.researcher,
+    r.researchers,
+    r.researcher_name,
+    r.researcher_names,
+    r.author_name,
+    r.author_names,
+  ];
+
+  const out = [];
+  const pushName = (name) => {
+    const v = String(name || "").trim();
+    if (!v) return;
+    out.push(v);
+  };
+
+  for (const c of candidates) {
+    if (!c) continue;
+
+    if (Array.isArray(c)) {
+      for (const item of c) {
+        if (!item) continue;
+        if (typeof item === "string") pushName(item);
+        else if (typeof item === "object") {
+          const name = item.name || item.author || item.researcher || item.full_name || item.display || item.label;
+          if (name) pushName(name);
+        }
+      }
+      if (out.length) break;
+      continue;
+    }
+
+    if (typeof c === "string") {
+      const s = c.trim();
+      if (!s) continue;
+      const parts = s.split(/[;,·|/]+/g).map((x) => x.trim()).filter(Boolean);
+      if (parts.length > 1) parts.forEach(pushName);
+      else pushName(s);
+      if (out.length) break;
+      continue;
+    }
+
+    if (typeof c === "object") {
+      if (c.name) pushName(c.name);
+      const arr = toArrayPayload(c);
+      if (Array.isArray(arr) && arr.length) {
+        for (const item of arr) {
+          if (!item) continue;
+          if (typeof item === "string") pushName(item);
+          else if (typeof item === "object") {
+            const name = item.name || item.author || item.researcher || item.full_name || item.display || item.label;
+            if (name) pushName(name);
+          }
+        }
+      }
+      if (out.length) break;
+    }
+  }
+
+  const seen = new Set();
+  return out.filter((x) => {
+    const k = x.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 function reportGroup(r) {
   // For national scope, some datasets label affiliation as NRC/NCT (or NST/NCT).
   return normalizeStr(
@@ -1729,6 +1805,8 @@ app.get("/api/reports/search", (req, res) => {
     year: reportYear(r) || "-",
     institute: instituteName(r) || "-",
     title: titleText(r) || "-",
+    authors: authorsArray(r),
+    authorsText: authorsText(r),
     url: reportUrl(r) || "",
     scope: r.__scope || scope,
   }));
