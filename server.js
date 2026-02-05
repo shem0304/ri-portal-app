@@ -266,7 +266,13 @@ const _koreaCache = {
   press: { ts: 0, items: [] },
   policy: { ts: 0, items: [] },
 };
-const KOREA_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+// korea.kr list/detail fetch can be slow on cold runs.
+// Use server-side caching with stale-while-revalidate to keep API latency low on Render.
+const KOREA_CACHE_TTL_MS = Number(process.env.KOREA_CACHE_TTL_MS || 15 * 60 * 1000); // default 15 minutes
+const KOREA_CACHE_SWR_MS = Number(process.env.KOREA_CACHE_SWR_MS || 60 * 60 * 1000); // default 60 minutes (serve stale while refreshing)
+
+// Prevent stampedes: only one refresh per kind at a time.
+const _koreaInFlight = { press: null, policy: null };
 
 function extractKoreaLinks(html, kind) {
   const base = "https://www.korea.kr";
@@ -321,6 +327,20 @@ function extractFirstDate(html) {
   return m ? m[1] : null;
 }
 
+async function pMapLimit(items, limit, mapper) {
+  const out = new Array(items.length);
+  let i = 0;
+  const workers = new Array(Math.min(limit, items.length)).fill(0).map(async () => {
+    while (true) {
+      const idx = i++;
+      if (idx >= items.length) return;
+      out[idx] = await mapper(items[idx], idx);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 async function fetchKoreaLatest(kind, limit) {
   const listUrl =
     kind === "press"
@@ -329,31 +349,69 @@ async function fetchKoreaLatest(kind, limit) {
 
   const cache = kind === "press" ? _koreaCache.press : _koreaCache.policy;
   const now = Date.now();
+  // Always refresh up to 20 so cache can satisfy different client limits without refetching.
+  const refreshLimit = 20;
+
+  // 1) Fresh cache: return immediately.
   if (cache.items.length && now - cache.ts < KOREA_CACHE_TTL_MS) {
     return { listUrl, items: cache.items.slice(0, limit), cached: true };
   }
 
+  // 2) Stale cache within SWR window: return stale immediately and refresh in background.
+  if (cache.items.length && now - cache.ts < KOREA_CACHE_SWR_MS) {
+    if (!_koreaInFlight[kind]) {
+      _koreaInFlight[kind] = (async () => {
+        try {
+          const refreshed = await fetchKoreaLatestFresh(kind, refreshLimit);
+          const slot = kind === "press" ? _koreaCache.press : _koreaCache.policy;
+          slot.ts = Date.now();
+          slot.items = refreshed;
+        } finally {
+          _koreaInFlight[kind] = null;
+        }
+      })();
+    }
+    return { listUrl, items: cache.items.slice(0, limit), cached: true, stale: true };
+  }
+
+  // 3) No cache / too old: do a foreground refresh (but still de-dupe concurrent refreshes).
+  if (_koreaInFlight[kind]) {
+    try {
+      await _koreaInFlight[kind];
+      return { listUrl, items: cache.items.slice(0, limit), cached: true };
+    } catch {
+      // fall through to direct fetch below
+    }
+  }
+
+  const items = await fetchKoreaLatestFresh(kind, refreshLimit);
+  cache.ts = now;
+  cache.items = items;
+  return { listUrl, items: items.slice(0, limit), cached: false };
+}
+
+async function fetchKoreaLatestFresh(kind, limit) {
+  const listUrl =
+    kind === "press"
+      ? "https://www.korea.kr/briefing/pressReleaseList.do"
+      : "https://www.korea.kr/news/policyNewsList.do";
+
   const listHtml = await fetchText(listUrl, { timeoutMs: 12000 });
   const links = extractKoreaLinks(listHtml, kind).slice(0, limit);
 
-  // Fetch each article page to get stable title/date (more robust than parsing list snippets)
-  const items = [];
-  for (const link of links) {
+  // Fetch details concurrently (sequential fetch was the biggest latency contributor).
+  const results = await pMapLimit(links, 5, async (link) => {
     try {
       const html = await fetchText(link, { timeoutMs: 12000 });
       const title = decodeHtmlEntities(extractOgTitle(html) || link);
       const date = extractFirstDate(html);
-      items.push({ title, link, date, source: "korea.kr" });
-    } catch (e) {
-      // keep item with link even if detail fetch fails
-      items.push({ title: link, link, date: null, source: "korea.kr" });
+      return { title, link, date, source: "korea.kr" };
+    } catch {
+      return { title: link, link, date: null, source: "korea.kr" };
     }
-  }
+  });
 
-  cache.ts = now;
-  cache.items = items;
-
-  return { listUrl, items: items.slice(0, limit), cached: false };
+  return results;
 }
 
 function stripCdata(s) {
@@ -1495,12 +1553,10 @@ app.get("/api/institutes/national/nct", async (req, res) => {
 
 
 app.get("/api/press/latest", async (req, res) => {
-  // Prevent browser/CDN caching so latest items show without hard refresh
+  // Server-side caching (SWR) already ensures freshness while keeping latency low.
+  // Allow short client/CDN caching to reduce repeated traffic.
   res.set({
-    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-    Pragma: "no-cache",
-    Expires: "0",
-    "Surrogate-Control": "no-store",
+    "Cache-Control": "public, max-age=60, stale-while-revalidate=900",
   });
   const limit = Math.max(1, Math.min(20, parseInt(req.query.limit || "10", 10)));
   try {
@@ -1534,12 +1590,10 @@ app.get("/api/health/rss", async (req, res) => {
 
 
 app.get("/api/news/policy/latest", async (req, res) => {
-  // Prevent browser/CDN caching so latest items show without hard refresh
+  // Server-side caching (SWR) already ensures freshness while keeping latency low.
+  // Allow short client/CDN caching to reduce repeated traffic.
   res.set({
-    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-    Pragma: "no-cache",
-    Expires: "0",
-    "Surrogate-Control": "no-store",
+    "Cache-Control": "public, max-age=60, stale-while-revalidate=900",
   });
   const limit = Math.max(1, Math.min(20, parseInt(req.query.limit || "10", 10)));
   try {
