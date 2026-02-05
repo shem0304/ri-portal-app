@@ -191,3 +191,7 @@ export async function uploadAttachment({ conversationId, senderId, filePath, ori
     throw err;
   }
 }
+
+export async function deleteConversation({ conversationId, userId }) {
+  return postForm("delete_conversation", { conversation_id: conversationId, user_id: userId });
+}

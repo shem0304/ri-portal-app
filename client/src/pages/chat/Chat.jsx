@@ -39,6 +39,7 @@ import {
   chatUpload,
   chatStartDm,
   chatListUsers,
+  chatDeleteConversation,
 } from "../../api/chat.js";
 
 function displayName(u) {
@@ -114,20 +115,6 @@ export default function Chat() {
   const [msgs, setMsgs] = React.useState([]);
   const [afterId, setAfterId] = React.useState(0);
 
-  const myUserId = React.useMemo(() => deriveMyUserId(), []);
-
-  // Per-user hidden conversation ids (UI-only delete)
-  const hiddenKey = React.useMemo(() => `chat_hidden_convs_${myUserId || "anon"}`,[myUserId]);
-  const [hiddenConvIds, setHiddenConvIds] = React.useState(() => {
-    try {
-      const raw = localStorage.getItem(hiddenKey);
-      const arr = raw ? JSON.parse(raw) : [];
-      return new Set((Array.isArray(arr) ? arr : []).map((x) => String(x)));
-    } catch {
-      return new Set();
-    }
-  });
-
   const [text, setText] = React.useState("");
   const [users, setUsers] = React.useState([]);
   const [peerUser, setPeerUser] = React.useState(null);
@@ -140,13 +127,7 @@ export default function Chat() {
 
   const [uploading, setUploading] = React.useState(false);
 
-  React.useEffect(() => {
-    try {
-      localStorage.setItem(hiddenKey, JSON.stringify(Array.from(hiddenConvIds)));
-    } catch {
-      // ignore
-    }
-  }, [hiddenConvIds, hiddenKey]);
+  const myUserId = React.useMemo(() => deriveMyUserId(), []);
 
   const userLabelMap = React.useMemo(() => {
     const m = new Map();
@@ -189,35 +170,12 @@ export default function Chat() {
     try {
       const r = await chatListConversations();
       if (!r.ok) throw new Error(r.error || "대화 목록 조회 실패");
-      const list = r.conversations || [];
-      const filtered = hiddenConvIds.size ? list.filter((c) => !hiddenConvIds.has(String(c?.id))) : list;
-      setConvs(filtered);
+      setConvs(r.conversations || []);
       setError("");
     } catch (e) {
       setError(String(e?.message || e));
     }
-  }, [hiddenConvIds]);
-
-  function onDeleteConversation(e, conversationId) {
-    e?.stopPropagation?.();
-    const cid = String(conversationId || "").trim();
-    if (!cid) return;
-
-    const ok = window.confirm("이 대화를 목록에서 삭제할까요?\n(서버에서 완전히 삭제되지 않을 수 있습니다.)");
-    if (!ok) return;
-
-    setHiddenConvIds((prev) => {
-      const next = new Set(prev);
-      next.add(cid);
-      return next;
-    });
-    setConvs((prev) => (Array.isArray(prev) ? prev.filter((c) => String(c?.id) !== cid) : prev));
-    if (String(activeId) === cid) {
-      setActiveId(null);
-      setMsgs([]);
-      setAfterId(0);
-    }
-  }
+  }, []);
 
   const loadMessages = React.useCallback(
     async (conversationId, { reset = false } = {}) => {
@@ -265,6 +223,30 @@ export default function Chat() {
     setAfterId(0);
     await loadMessages(id, { reset: true });
   }
+
+async function onDeleteConversation(conversationId) {
+  const cid = parseInt(String(conversationId || "0"), 10);
+  if (!cid) return;
+
+  const ok = window.confirm("이 대화를 삭제할까요?\n삭제하면 복구할 수 없습니다.");
+  if (!ok) return;
+
+  try {
+    const r = await chatDeleteConversation(cid);
+    if (r?.ok === false) throw new Error(r?.error || "delete_failed");
+
+    // If the active conversation was deleted, reset message pane.
+    setConvs((prev) => (Array.isArray(prev) ? prev.filter((x) => x.id !== cid) : prev));
+    if (activeId === cid) {
+      setActiveId(null);
+      setMsgs([]);
+      setAfterId(0);
+    }
+  } catch (e) {
+    setError(String(e?.message || e));
+  }
+}
+
 
   async function onStartDm() {
     try {
@@ -497,6 +479,8 @@ export default function Chat() {
                       selected={activeId === c.id}
                       onClick={() => onSelectConversation(c.id)}
                       sx={{
+                        display: 'flex',
+                        alignItems: 'center',
                         py: 2,
                         px: 2.5,
                         borderLeft: '3px solid transparent',
@@ -521,6 +505,7 @@ export default function Chat() {
                       >
                         {getInitials(peerName)}
                       </Avatar>
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
                       <ListItemText
                         primary={peerName}
                         secondary={
@@ -551,19 +536,22 @@ export default function Chat() {
                           color: '#333',
                         }}
                       />
-
-                      {/* 오른쪽 삭제 버튼 */}
+                      </Box>
                       <IconButton
+                        aria-label="delete-conversation"
                         size="small"
-                        aria-label="대화 삭제"
-                        onClick={(e) => onDeleteConversation(e, c.id)}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onDeleteConversation(c.id);
+                        }}
                         sx={{
                           ml: 1,
-                          color: '#999',
-                          '&:hover': { color: '#d32f2f', backgroundColor: 'rgba(211,47,47,0.08)' },
+                          color: "#999",
+                          "&:hover": { color: "#d32f2f", backgroundColor: "rgba(211,47,47,0.08)" },
                         }}
                       >
-                        <CloseIcon sx={{ fontSize: 18 }} />
+                        <CloseIcon fontSize="small" />
                       </IconButton>
                     </ListItemButton>
                   );

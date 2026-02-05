@@ -4,7 +4,7 @@ import multer from "multer";
 import os from "node:os";
 import fs from "node:fs/promises";
 
-import { startDm, listConversations, listMessages, sendMessage, uploadAttachment } from "./chatRemote.js";
+import { startDm, listConversations, listMessages, sendMessage, uploadAttachment, deleteConversation } from "./chatRemote.js";
 
 // In-memory online presence (best-effort).
 // - Updated when a user hits any chat endpoint.
@@ -134,6 +134,24 @@ export function createChatRouter({ getSessionUserId, listUsers } = {}) {
       return res.status(502).json({ ok: false, error: String(e?.message || e) });
     }
   });
+
+  router.post("/delete", express.json(), async (req, res) => {
+    const userId = getSessionUserId?.(req);
+    if (!userId) return res.status(401).json({ ok: false, error: "unauthorized" });
+    touch(userId);
+
+    const conversationId = parseInt(String(req.body?.conversationId || "0"), 10);
+    if (!conversationId) return res.status(400).json({ ok: false, error: "invalid conversationId" });
+
+    try {
+      const r = await deleteConversation({ conversationId, userId });
+      if (r?.ok === false) return res.status(502).json(r);
+      return res.json(r);
+    } catch (e) {
+      return res.status(502).json({ ok: false, error: String(e?.message || e) });
+    }
+  });
+
 
   router.post("/start-dm", express.json(), async (req, res) => {
     const userId = getSessionUserId?.(req);

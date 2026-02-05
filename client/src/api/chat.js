@@ -64,3 +64,7 @@ export function chatUpload(conversationId, file, { onProgress } = {}) {
     xhr.send(form);
   });
 }
+
+export async function chatDeleteConversation(conversationId) {
+  return apiFetch("/api/chat/delete", { method: "POST", body: { conversationId }, auth: true });
+}
