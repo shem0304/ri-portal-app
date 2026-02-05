@@ -1,13 +1,19 @@
 import React from 'react';
 import {
   Box, Button, Card, CardContent, Divider, MenuItem, Pagination, Select,
-  Stack, TextField, Typography
+  Stack, TextField, Typography, Chip, CircularProgress, InputAdornment, Fade
 } from '@mui/material';
 import { useLocation } from 'react-router-dom';
+import SearchIcon from '@mui/icons-material/Search';
+import DescriptionIcon from '@mui/icons-material/Description';
+import PersonIcon from '@mui/icons-material/Person';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import BusinessIcon from '@mui/icons-material/Business';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import { apiFetch } from '../api';
-import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
-function ReportCard({ item }) {
+function ReportCard({ item, index }) {
   const year = item?.year ?? '';
   const inst = item?.institute ?? '';
   const scopeLabel = item?.scope === 'local' ? '지자체' : item?.scope === 'national' ? '정부출연' : '';
@@ -20,111 +26,192 @@ function ReportCard({ item }) {
         ? item.authorsText.split(/[;,·|/]+/g).map(s => s.trim()).filter(Boolean)
         : [];
 
+  const scopeColor = item?.scope === 'local' ? '#1976d2' : '#9c27b0';
+  const scopeBgColor = item?.scope === 'local' ? '#e3f2fd' : '#f3e5f5';
+
   return (
-    <Card
-      variant='outlined'
-      sx={{
-        borderRadius: 3,
-        height: 220,
-        display: 'flex',
-        flexDirection: 'column',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
-      }}
-    >
-      <CardContent
+    <Fade in timeout={300 + index * 50}>
+      <Card
+        variant="outlined"
         sx={{
-          p: 3,
-          flex: 1,
+          borderRadius: 4,
+          height: 260,
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'space-between',
-          minWidth: 0,
-          '&:last-child': { pb: 3 },
+          position: 'relative',
+          overflow: 'hidden',
+          transition: 'all 0.3s ease',
+          border: '2px solid',
+          borderColor: 'divider',
+          // 연구보고서 종이 느낌의 배경
+          background: `
+            linear-gradient(to right, #f8f9fa 1px, transparent 1px),
+            linear-gradient(to bottom, #f8f9fa 1px, transparent 1px),
+            linear-gradient(145deg, #ffffff 0%, #fafafa 100%)
+          `,
+          backgroundSize: '20px 20px, 20px 20px, 100% 100%',
+          '&:hover': {
+            transform: 'translateY(-6px)',
+            boxShadow: '0 12px 28px rgba(0,0,0,0.15)',
+            borderColor: scopeColor,
+          },
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 6,
+            background: `linear-gradient(90deg, ${scopeColor} 0%, ${scopeColor}80 100%)`,
+          },
         }}
       >
-        <Box sx={{ minWidth: 0 }}>
-          {/* 제목: 최대 3줄 */}
-          <Typography
-            sx={{
-              fontSize: 16,
-              fontWeight: 800,
-              lineHeight: 1.5,
-              display: '-webkit-box',
-              WebkitBoxOrient: 'vertical',
-              WebkitLineClamp: 3,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              minHeight: 72,
-              mb: 1.5,
-            }}
-            title={item?.title || ''}
-          >
-            {item?.title || '-'}
-          </Typography>
+        <CardContent
+          sx={{
+            p: 3,
+            pt: 2.5,
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            minWidth: 0,
+            '&:last-child': { pb: 3 },
+          }}
+        >
+          <Box sx={{ minWidth: 0 }}>
+            {/* 상단 메타 태그 */}
+            <Stack direction="row" spacing={1} sx={{ mb: 1.5, flexWrap: 'wrap', gap: 0.5 }}>
+              {year && (
+                <Chip
+                  icon={<CalendarTodayIcon sx={{ fontSize: 14 }} />}
+                  label={year}
+                  size="small"
+                  sx={{
+                    height: 22,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    backgroundColor: scopeBgColor,
+                    color: scopeColor,
+                  }}
+                />
+              )}
+              {scopeLabel && (
+                <Chip
+                  label={scopeLabel}
+                  size="small"
+                  sx={{
+                    height: 22,
+                    fontSize: 11,
+                    fontWeight: 700,
+                    backgroundColor: scopeBgColor,
+                    color: scopeColor,
+                  }}
+                />
+              )}
+            </Stack>
 
-          {/* 메타 */}
-          <Typography
-            variant='body2'
-            color='text.secondary'
-            sx={{
-              display: 'flex',
-              gap: 2,
-              flexWrap: 'wrap',
-              mb: authorsArr.length ? 1 : 0,
-            }}
-          >
-            {metaParts.map((t, idx) => (
-              <span key={`${t}-${idx}`}>{t}</span>
-            ))}
-          </Typography>
-
-          {/* 저자 */}
-          {authorsArr.length ? (
+            {/* 제목 */}
             <Typography
-              variant='body2'
-              color='text.secondary'
               sx={{
+                fontSize: 16,
+                fontWeight: 800,
+                lineHeight: 1.5,
                 display: '-webkit-box',
                 WebkitBoxOrient: 'vertical',
-                WebkitLineClamp: 1,
+                WebkitLineClamp: 3,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
+                minHeight: 72,
+                mb: 1.5,
+                color: 'text.primary',
               }}
-              title={`저자: ${authorsArr.join(', ')}`}
+              title={item?.title || ''}
             >
-              저자: {authorsArr.join(', ')}
+              {item?.title || '-'}
             </Typography>
-          ) : null}
-        </Box>
 
-        {/* 하단 버튼 */}
-        {item?.url ? (
-          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              variant='outlined'
-              size='small'
-              component='a'
-              href={item.url}
-              target='_blank'
-              rel='noreferrer'
-              sx={{
-                borderRadius: 1.5,
-                px: 3,
-                py: 1,
-                fontWeight: 800,
-                minWidth: 110,
-              }}
-            >
-              열기
-            </Button>
+            {/* 기관명 */}
+            {inst && (
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                <BusinessIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    fontWeight: 600,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {inst}
+                </Typography>
+              </Stack>
+            )}
+
+            {/* 저자 */}
+            {authorsArr.length > 0 && (
+              <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ mt: 1 }}>
+                <PersonIcon sx={{ fontSize: 16, color: 'text.secondary', mt: 0.2 }} />
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{
+                    flex: 1,
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    WebkitLineClamp: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    fontWeight: 500,
+                  }}
+                  title={`저자: ${authorsArr.join(', ')}`}
+                >
+                  {authorsArr.join(', ')}
+                </Typography>
+              </Stack>
+            )}
           </Box>
-        ) : (
-          <Typography variant='body2' color='text.secondary' sx={{ mt: 2 }}>
-            링크 없음
-          </Typography>
-        )}
-      </CardContent>
-    </Card>
+
+          {/* 하단 버튼 */}
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'flex-end' }}>
+            {item?.url ? (
+              <Button
+                variant="contained"
+                size="small"
+                component="a"
+                href={item.url}
+                target="_blank"
+                rel="noreferrer"
+                endIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
+                sx={{
+                  borderRadius: 2,
+                  px: 2.5,
+                  py: 0.75,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  textTransform: 'none',
+                  backgroundColor: scopeColor,
+                  '&:hover': {
+                    backgroundColor: scopeColor,
+                    filter: 'brightness(0.9)',
+                  },
+                }}
+              >
+                보고서 열기
+              </Button>
+            ) : (
+              <Chip
+                label="링크 없음"
+                size="small"
+                variant="outlined"
+                sx={{ fontWeight: 600 }}
+              />
+            )}
+          </Box>
+        </CardContent>
+      </Card>
+    </Fade>
   );
 }
 
@@ -143,18 +230,10 @@ export default function ReportsPage() {
   const page = Math.floor(meta.offset / meta.limit) + 1;
   const totalPages = Math.max(1, Math.ceil(meta.total / meta.limit));
 
-  // Hydrate filters from URL query params (e.g., /reports?q=<researcher name>)
-  // so deep links from the Researcher page automatically run.
   const hydratedFromUrlRef = React.useRef(false);
 
-  // Keep filter option lists in sync with the selected scope.
-  // - all: local + national
-  // - local: local only
-  // - national: national only
   React.useEffect(() => {
     (async () => {
-      // National scope uses council-style filters (NRC/NCT) rather than a long institute list.
-      // Local/all scopes show institute names.
       if ((scope || 'all') === 'national') {
         setInstOptions(['NRC', 'NCT']);
       } else {
@@ -164,7 +243,6 @@ export default function ReportsPage() {
         const s = await apiFetch(`/api/trends/summary?${qs.toString()}`);
         setInstOptions((s.reportsPerInstitute || []).map(d => d.institute));
 
-        // Only show years that actually exist in the selected scope.
         const ys = (s.reportsPerYear || [])
           .filter(d => (d?.count || 0) > 0)
           .map(d => d.year);
@@ -172,7 +250,6 @@ export default function ReportsPage() {
         return;
       }
 
-      // For national scope, year options are still derived from the scope-specific summary.
       const qs = new URLSearchParams();
       qs.set('top', '1');
       qs.set('scope', scope || 'all');
@@ -212,8 +289,6 @@ export default function ReportsPage() {
   }
 
   React.useEffect(() => {
-    // If deep-link query params exist, let the URL-hydration effect trigger the first load
-    // to avoid an initial unfiltered flash.
     const sp = new URLSearchParams(location.search || '');
     const hasUrlFilters = Boolean(sp.get('q') || sp.get('scope') || sp.get('institute') || sp.get('year'));
     if (!hydratedFromUrlRef.current && hasUrlFilters) return;
@@ -240,7 +315,6 @@ export default function ReportsPage() {
       if (yearP) setYear(yearP);
       if (instP) setInstitute(instP);
 
-      // Trigger a search with the URL values immediately (without waiting for state flush).
       load({
         offset: 0,
         qOverride: qp,
@@ -255,69 +329,227 @@ export default function ReportsPage() {
   }, [location.search]);
 
   return (
-    <Box>
-      <Card sx={{ borderRadius: 4 }}>
-        <CardContent>
-          <Typography variant='h5' sx={{ fontWeight: 800, mb: 2 }}>연구보고서</Typography>
+    <Box sx={{ backgroundColor: '#f8f9fa', minHeight: '100vh', py: 4 }}>
+      <Box sx={{ maxWidth: 1400, mx: 'auto', px: 3 }}>
+        <Card
+          sx={{
+            borderRadius: 4,
+            boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
+          }}
+        >
+          <CardContent sx={{ p: 4 }}>
+            {/* 헤더 */}
+            <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+              <DescriptionIcon sx={{ fontSize: 32, color: 'primary.main' }} />
+              <Typography variant="h5" sx={{ fontWeight: 900 }}>
+                연구보고서 검색
+              </Typography>
+            </Stack>
 
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ mb: 2 }}>
-            <Select
-              value={scope}
-              onChange={(e) => {
-                // Changing scope should also reset filters that might not exist in the new scope.
-                // This prevents confusing empty screens.
-                const next = e.target.value;
-                setScope(next);
-                setYear('');
-                setInstitute('');
+            {/* 필터 섹션 */}
+            <Box
+              sx={{
+                backgroundColor: '#f8f9fa',
+                borderRadius: 3,
+                p: 3,
+                mb: 3,
               }}
-              sx={{ minWidth: 160 }}
             >
-              <MenuItem value='all'>전체</MenuItem>
-              <MenuItem value='local'>지자체연구기관</MenuItem>
-              <MenuItem value='national'>정부출연연구기관</MenuItem>
-            </Select>
-            <Select value={institute} onChange={(e) => setInstitute(e.target.value)} displayEmpty sx={{ minWidth: 220 }}>
-              <MenuItem value=''>기관 전체</MenuItem>
-              {instOptions.slice(0, 250).map(i => <MenuItem key={i} value={i}>{i}</MenuItem>)}
-            </Select>
-            <Select value={year} onChange={(e) => setYear(e.target.value)} displayEmpty sx={{ minWidth: 140 }}>
-              <MenuItem value=''>연도 전체</MenuItem>
-              {yearOptions.map(y => <MenuItem key={y} value={y}>{y}</MenuItem>)}
-            </Select>
-            <TextField fullWidth placeholder='검색어(키워드/제목/연구자)' value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') load({ offset: 0 }); }} />
-            <Button variant='contained' endIcon={<OpenInNewIcon />} onClick={() => load({ offset: 0 })} disabled={loading}>검색</Button>
-          </Stack>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <FilterListIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                  검색 필터
+                </Typography>
+              </Stack>
 
-          {error ? (
-            <Typography variant='body2' color='error' sx={{ mb: 1 }}>{error}</Typography>
-          ) : null}
-          <Typography variant='caption' color='text.secondary'>검색 결과: {meta.total}건</Typography>
-          <Divider sx={{ my: 2 }} />
+              <Stack spacing={2}>
+                {/* 첫 번째 줄: Scope, 기관, 연도 */}
+                <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
+                  <Select
+                    value={scope}
+                    onChange={(e) => {
+                      const next = e.target.value;
+                      setScope(next);
+                      setYear('');
+                      setInstitute('');
+                    }}
+                    sx={{
+                      minWidth: 200,
+                      backgroundColor: 'white',
+                      borderRadius: 2,
+                    }}
+                  >
+                    <MenuItem value="all">전체</MenuItem>
+                    <MenuItem value="local">지자체연구기관</MenuItem>
+                    <MenuItem value="national">정부출연연구기관</MenuItem>
+                  </Select>
+                  <Select
+                    value={institute}
+                    onChange={(e) => setInstitute(e.target.value)}
+                    displayEmpty
+                    sx={{
+                      minWidth: 250,
+                      backgroundColor: 'white',
+                      borderRadius: 2,
+                    }}
+                  >
+                    <MenuItem value="">기관 전체</MenuItem>
+                    {instOptions.slice(0, 250).map(i => <MenuItem key={i} value={i}>{i}</MenuItem>)}
+                  </Select>
+                  <Select
+                    value={year}
+                    onChange={(e) => setYear(e.target.value)}
+                    displayEmpty
+                    sx={{
+                      minWidth: 150,
+                      backgroundColor: 'white',
+                      borderRadius: 2,
+                    }}
+                  >
+                    <MenuItem value="">연도 전체</MenuItem>
+                    {yearOptions.map(y => <MenuItem key={y} value={y}>{y}</MenuItem>)}
+                  </Select>
+                </Stack>
 
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
-              columnGap: 3,
-              rowGap: 7,
-              py: 4,
-              mt: 3,
-              mb: 4,
-            }}
-          >
-            {items.map((it) => (
-              <Box key={`${it.scope}-${it.id}`} sx={{ minWidth: 0 }}>
-                <ReportCard item={it} />
+                {/* 두 번째 줄: 검색어 + 버튼 */}
+                <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                  <TextField
+                    fullWidth
+                    placeholder="검색어(키워드/제목/연구자)"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') load({ offset: 0 }); }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon sx={{ color: 'text.secondary' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                    sx={{
+                      backgroundColor: 'white',
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: 2,
+                      },
+                    }}
+                  />
+                  <Button
+                    variant="contained"
+                    size="large"
+                    endIcon={<SearchIcon />}
+                    onClick={() => load({ offset: 0 })}
+                    disabled={loading}
+                    sx={{
+                      minWidth: 140,
+                      borderRadius: 2,
+                      fontWeight: 700,
+                      px: 4,
+                    }}
+                  >
+                    검색
+                  </Button>
+                </Stack>
+              </Stack>
+            </Box>
+
+            {/* 에러 메시지 */}
+            {error && (
+              <Box
+                sx={{
+                  backgroundColor: '#ffebee',
+                  borderRadius: 2,
+                  p: 2,
+                  mb: 2,
+                }}
+              >
+                <Typography variant="body2" color="error" sx={{ fontWeight: 600 }}>
+                  {error}
+                </Typography>
               </Box>
-            ))}
-          </Box>
+            )}
 
-          <Stack direction='row' justifyContent='center' sx={{ mt: 3 }}>
-            <Pagination count={totalPages} page={page} onChange={(_, p) => load({ offset: (p - 1) * meta.limit })} />
-          </Stack>
-        </CardContent>
-      </Card>
+            {/* 검색 결과 수 */}
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <Chip
+                label={`총 ${meta.total.toLocaleString()}건`}
+                color="primary"
+                sx={{ fontWeight: 700 }}
+              />
+              {loading && <CircularProgress size={20} />}
+            </Stack>
+
+            <Divider sx={{ mb: 3 }} />
+
+            {/* 로딩 상태 */}
+            {loading && items.length === 0 ? (
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  py: 8,
+                  gap: 2,
+                }}
+              >
+                <CircularProgress size={60} thickness={4} />
+                <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  검색 중...
+                </Typography>
+              </Box>
+            ) : items.length === 0 ? (
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  py: 8,
+                }}
+              >
+                <DescriptionIcon sx={{ fontSize: 80, color: 'text.disabled', mb: 2 }} />
+                <Typography variant="h6" color="text.secondary" sx={{ fontWeight: 600 }}>
+                  검색 결과가 없습니다
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                  다른 검색어나 필터를 사용해보세요
+                </Typography>
+              </Box>
+            ) : (
+              <>
+                {/* 보고서 카드 그리드 */}
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                    gap: 3,
+                    mb: 4,
+                  }}
+                >
+                  {items.map((it, idx) => (
+                    <Box key={`${it.scope}-${it.id}`} sx={{ minWidth: 0 }}>
+                      <ReportCard item={it} index={idx} />
+                    </Box>
+                  ))}
+                </Box>
+
+                {/* 페이지네이션 */}
+                <Stack direction="row" justifyContent="center" sx={{ mt: 4 }}>
+                  <Pagination
+                    count={totalPages}
+                    page={page}
+                    onChange={(_, p) => load({ offset: (p - 1) * meta.limit })}
+                    color="primary"
+                    size="large"
+                    sx={{
+                      '& .MuiPaginationItem-root': {
+                        fontWeight: 600,
+                      },
+                    }}
+                  />
+                </Stack>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </Box>
     </Box>
   );
 }
