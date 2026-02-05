@@ -315,6 +315,7 @@ export default function AppLayout() {
           sx={{
             borderLeft: '4px solid transparent',
             pl: 2,
+            py: 1.5,
             mb: 0.5,
             '&.active': {
               backgroundColor: '#f0f4f8',
@@ -328,14 +329,14 @@ export default function AppLayout() {
             transition: 'all 0.2s ease',
           }}
         >
-          <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
-            <AccountBalanceIcon />
+          <ListItemIcon sx={{ minWidth: 44, color: '#666' }}>
+            <AccountBalanceIcon sx={{ fontSize: 24 }} />
           </ListItemIcon>
           <ListItemText 
             primary='기관' 
             secondary='지자체·정부출연'
-            primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
-            secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+            primaryTypographyProps={{ fontWeight: 600, fontSize: 15, color: '#333' }}
+            secondaryTypographyProps={{ fontSize: 13, color: '#888' }}
           />
         </ListItemButton>
         <ListItemButton 
@@ -344,6 +345,7 @@ export default function AppLayout() {
           sx={{
             borderLeft: '4px solid transparent',
             pl: 2,
+            py: 1.5,
             mb: 0.5,
             '&.active': {
               backgroundColor: '#f0f4f8',
@@ -357,14 +359,14 @@ export default function AppLayout() {
             transition: 'all 0.2s ease',
           }}
         >
-          <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
-            <TrendingUpIcon />
+          <ListItemIcon sx={{ minWidth: 44, color: '#666' }}>
+            <TrendingUpIcon sx={{ fontSize: 24 }} />
           </ListItemIcon>
           <ListItemText 
             primary='연구 트렌드' 
             secondary='키워드·네트워크·버스트'
-            primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
-            secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+            primaryTypographyProps={{ fontWeight: 600, fontSize: 15, color: '#333' }}
+            secondaryTypographyProps={{ fontSize: 13, color: '#888' }}
           />
         </ListItemButton>
         <ListItemButton 
@@ -373,6 +375,7 @@ export default function AppLayout() {
           sx={{
             borderLeft: '4px solid transparent',
             pl: 2,
+            py: 1.5,
             mb: 0.5,
             '&.active': {
               backgroundColor: '#f0f4f8',
@@ -386,14 +389,14 @@ export default function AppLayout() {
             transition: 'all 0.2s ease',
           }}
         >
-          <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
-            <ScienceIcon />
+          <ListItemIcon sx={{ minWidth: 44, color: '#666' }}>
+            <ScienceIcon sx={{ fontSize: 24 }} />
           </ListItemIcon>
           <ListItemText 
             primary='연구보고서' 
             secondary={user ? '로그인됨' : '로그인 필요'}
-            primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
-            secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+            primaryTypographyProps={{ fontWeight: 600, fontSize: 15, color: '#333' }}
+            secondaryTypographyProps={{ fontSize: 13, color: '#888' }}
           />
         </ListItemButton>
 
@@ -403,6 +406,7 @@ export default function AppLayout() {
           sx={{
             borderLeft: '4px solid transparent',
             pl: 2,
+            py: 1.5,
             mb: 0.5,
             '&.active': {
               backgroundColor: '#f0f4f8',
@@ -416,14 +420,14 @@ export default function AppLayout() {
             transition: 'all 0.2s ease',
           }}
         >
-          <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
-            <PersonSearchIcon />
+          <ListItemIcon sx={{ minWidth: 44, color: '#666' }}>
+            <PersonSearchIcon sx={{ fontSize: 24 }} />
           </ListItemIcon>
           <ListItemText 
             primary='연구자 찾기' 
             secondary='전문분야·기관·성과'
-            primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
-            secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+            primaryTypographyProps={{ fontWeight: 600, fontSize: 15, color: '#333' }}
+            secondaryTypographyProps={{ fontSize: 13, color: '#888' }}
           />
         </ListItemButton>
 
@@ -435,6 +439,7 @@ export default function AppLayout() {
             sx={{
               borderLeft: '4px solid transparent',
               pl: 2,
+              py: 1.5,
               mb: 0.5,
               '&.active': {
                 backgroundColor: '#f0f4f8',
@@ -448,16 +453,16 @@ export default function AppLayout() {
               transition: 'all 0.2s ease',
             }}
           >
-            <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
+            <ListItemIcon sx={{ minWidth: 44, color: '#666' }}>
               <Badge badgeContent={unreadCount} color='error' invisible={!unreadCount}>
-                <ChatIcon />
+                <ChatIcon sx={{ fontSize: 24 }} />
               </Badge>
             </ListItemIcon>
             <ListItemText 
               primary='채팅' 
               secondary='등록된 사용자 간 대화'
-              primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
-              secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+              primaryTypographyProps={{ fontWeight: 600, fontSize: 15, color: '#333' }}
+              secondaryTypographyProps={{ fontSize: 13, color: '#888' }}
             />
           </ListItemButton>
         ) : null}
@@ -473,7 +478,7 @@ export default function AppLayout() {
                 display: 'block', 
                 color: '#999',
                 fontWeight: 700,
-                fontSize: 11,
+                fontSize: 12,
                 letterSpacing: '0.5px'
               }}
             >
@@ -489,6 +494,7 @@ export default function AppLayout() {
     sx={{
       borderLeft: '4px solid transparent',
       pl: 2,
+      py: 1.5,
       mb: 0.5,
       '&.active': {
         backgroundColor: '#f3e5f5',
@@ -502,14 +508,14 @@ export default function AppLayout() {
       transition: 'all 0.2s ease',
     }}
   >
-    <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
-      <AdminPanelSettingsIcon />
+    <ListItemIcon sx={{ minWidth: 44, color: '#666' }}>
+      <AdminPanelSettingsIcon sx={{ fontSize: 24 }} />
     </ListItemIcon>
     <ListItemText 
       primary='관리자' 
       secondary='사용자 승인·관리'
-      primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
-      secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+      primaryTypographyProps={{ fontWeight: 600, fontSize: 15, color: '#333' }}
+      secondaryTypographyProps={{ fontSize: 13, color: '#888' }}
     />
   </ListItemButton>
 ) : null}
@@ -521,6 +527,7 @@ export default function AppLayout() {
     sx={{
       borderLeft: '4px solid transparent',
       pl: 2,
+      py: 1.5,
       mb: 0.5,
       '&.active': {
         backgroundColor: '#f3e5f5',
@@ -534,14 +541,14 @@ export default function AppLayout() {
       transition: 'all 0.2s ease',
     }}
   >
-    <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
-      <SpellcheckIcon />
+    <ListItemIcon sx={{ minWidth: 44, color: '#666' }}>
+      <SpellcheckIcon sx={{ fontSize: 24 }} />
     </ListItemIcon>
     <ListItemText 
       primary='불용어 관리' 
       secondary='트렌드 분석 제외어'
-      primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
-      secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+      primaryTypographyProps={{ fontWeight: 600, fontSize: 15, color: '#333' }}
+      secondaryTypographyProps={{ fontSize: 13, color: '#888' }}
     />
   </ListItemButton>
 ) : null}
