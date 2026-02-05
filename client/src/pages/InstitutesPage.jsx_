@@ -22,31 +22,6 @@ function normalizeItems(payload) {
   return [];
 }
 
-// Simple client-side cache for slow external feeds (press/policy).
-// Cache-first for fast paint, then refresh in background.
-const FEED_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
-function readFeedCache(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    const { savedAt, payload } = parsed;
-    if (!savedAt || !payload) return null;
-    if (Date.now() - Number(savedAt) > FEED_CACHE_TTL_MS) return null;
-    return payload;
-  } catch {
-    return null;
-  }
-}
-function writeFeedCache(key, payload) {
-  try {
-    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), payload }));
-  } catch {
-    // ignore quota / private mode
-  }
-}
-
 function breakTitleByLength(title, maxLen = 50) {
   if (!title) return '';
   const t = String(title).trim();
@@ -262,52 +237,17 @@ export default function InstitutesPage() {
       setPressLoading(true);
       setPolicyLoading(true);
       try {
-        // 1) Fast paint: show cached feeds immediately if available
-        const PRESS_CACHE_KEY = 'ri_portal_press_latest_v1';
-        const POLICY_CACHE_KEY = 'ri_portal_policy_latest_v1';
-
-        const cachedPress = readFeedCache(PRESS_CACHE_KEY);
-        if (cachedPress) {
-          setPress(normalizeItems(cachedPress));
-          setPressNote((cachedPress && cachedPress.note) || '');
-          setPressLoading(false);
-        }
-        const cachedPolicy = readFeedCache(POLICY_CACHE_KEY);
-        if (cachedPolicy) {
-          setPolicyNews(normalizeItems(cachedPolicy));
-          setPolicyNote((cachedPolicy && cachedPolicy.note) || '');
-          setPolicyLoading(false);
-        }
-
-        // 2) Always fetch local institutes first (usually fast, internal)
-        const l = await apiFetch('/api/institutes/local');
-        setLocal(normalizeItems(l));
-        setLocalLoading(false);
-
-        // 3) Refresh feeds in background (external calls can be slow)
-        const [pRes, nRes] = await Promise.allSettled([
-          apiFetch('/api/press/latest?limit=10'),
-          apiFetch('/api/news/policy/latest?limit=10'),
+        const [l, p, n] = await Promise.all([
+          apiFetch('/api/institutes/local'),
+          apiFetch('/api/press/latest?limit=10', { cache: 'no-store' }),
+          apiFetch('/api/news/policy/latest?limit=10', { cache: 'no-store' }),
         ]);
-
-        if (pRes.status === 'fulfilled') {
-          const p = pRes.value;
-          setPress(normalizeItems(p));
-          setPressNote((p && p.note) || '');
-          writeFeedCache(PRESS_CACHE_KEY, p);
-        } else if (!cachedPress) {
-          // only keep spinner if we had nothing to show
-          console.error(pRes.reason);
-        }
-        if (nRes.status === 'fulfilled') {
-          const n = nRes.value;
-          setPolicyNews(normalizeItems(n));
-          setPolicyNote((n && n.note) || '');
-          writeFeedCache(POLICY_CACHE_KEY, n);
-        } else if (!cachedPolicy) {
-          console.error(nRes.reason);
-        }
-
+        setLocal(normalizeItems(l));
+        setPress(normalizeItems(p));
+        setPressNote((p && p.note) || '');
+        setPolicyNews(normalizeItems(n));
+        setPolicyNote((n && n.note) || '');
+        setLocalLoading(false);
         setPressLoading(false);
         setPolicyLoading(false);
       } catch (e) {
