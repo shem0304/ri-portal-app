@@ -13,6 +13,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import { apiFetch } from '../api';
 import { useNavigate } from 'react-router-dom';
 
@@ -425,6 +426,14 @@ export default function ResearchersPage() {
                 border: '1px solid #e0e0e0',
               }}
             >
+              {/* 검색 필터 라벨 */}
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <FilterListIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                  검색 필터
+                </Typography>
+              </Stack>
+
               <Stack spacing={2}>
                 {/* 첫 번째 줄: 필터 */}
                 <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
@@ -661,9 +670,10 @@ export default function ResearchersPage() {
                 <Box
                   sx={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(380px, 440px))',
                     gap: 3,
                     mb: 4,
+                    justifyContent: 'start',
                   }}
                 >
                   {items.map((it, idx) => (

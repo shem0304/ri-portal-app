@@ -6,6 +6,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import BusinessIcon from '@mui/icons-material/Business';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import FilterListIcon from '@mui/icons-material/FilterList';
 import { apiFetch } from '../api';
 
 // Accept common API shapes:
@@ -456,7 +457,15 @@ export default function InstitutesPage() {
             </Typography>
 
             {/* 검색 및 필터 */}
-            <Stack spacing={2} sx={{ mb: 4 }}>
+            <Box sx={{ mb: 3 }}>
+              <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+                <FilterListIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                  검색 필터
+                </Typography>
+              </Stack>
+              
+              <Stack spacing={2}>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                 <TextField
                   fullWidth
@@ -514,6 +523,7 @@ export default function InstitutesPage() {
                 </Typography>
               </Box>
             </Stack>
+          </Box>
 
             <Divider sx={{ mb: 4 }} />
 
@@ -528,7 +538,8 @@ export default function InstitutesPage() {
                   <Box
                     sx={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 380px))',
+                      justifyContent: 'start',
                       gap: 3,
                     }}
                   >
@@ -565,7 +576,8 @@ export default function InstitutesPage() {
                   <Box
                     sx={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 380px))',
+                      justifyContent: 'start',
                       gap: 3,
                     }}
                   >
@@ -598,8 +610,9 @@ export default function InstitutesPage() {
               <Box
                 sx={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
-                  gap: 3,
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 380px))',
+                      justifyContent: 'start',
+                      gap: 3,
                 }}
               >
                 {scope === 'local' && localLoading ? (
