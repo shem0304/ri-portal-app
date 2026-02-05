@@ -250,11 +250,12 @@ export default function AppLayout() {
           gap: 1.5, 
           color: 'inherit', 
           textDecoration: 'none',
-          borderBottom: '3px solid #003d82',
-          backgroundColor: '#f8f9fa',
+          background: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
           transition: 'all 0.2s ease',
           '&:hover': {
-            backgroundColor: '#e9ecef',
+            background: 'linear-gradient(135deg, #e9ecef 0%, #dee2e6 100%)',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.08)',
           }
         }}
       >
@@ -263,7 +264,8 @@ export default function AppLayout() {
             width: 44,
             height: 44,
             borderRadius: 1,
-            backgroundColor: '#003d82',
+            background: 'linear-gradient(135deg, #003d82 0%, #0051a8 100%)',
+            boxShadow: '0 2px 4px rgba(0,61,130,0.2)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -597,8 +599,7 @@ export default function AppLayout() {
         sx={{ 
           zIndex: (t) => t.zIndex.drawer + 1,
           backgroundColor: 'white',
-          borderBottom: '3px solid #003d82',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.06)',
         }} 
         elevation={0}
       >
@@ -637,7 +638,8 @@ export default function AppLayout() {
                 width: 40,
                 height: 40,
                 borderRadius: 1,
-                backgroundColor: '#003d82',
+                background: 'linear-gradient(135deg, #003d82 0%, #0051a8 100%)',
+                boxShadow: '0 2px 4px rgba(0,61,130,0.2)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -716,14 +718,15 @@ export default function AppLayout() {
                   borderRadius: 1,
                   border: '1px solid',
                   borderColor: '#e0e0e0',
-                  backgroundColor: '#f8f9fa',
+                  backgroundColor: 'white',
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
                 }}
               >
                 <Avatar 
                   sx={{ 
                     width: 28, 
                     height: 28,
-                    backgroundColor: '#003d82',
+                    background: 'linear-gradient(135deg, #003d82 0%, #0051a8 100%)',
                     color: 'white',
                     fontWeight: 700,
                     fontSize: 13
@@ -787,16 +790,16 @@ export default function AppLayout() {
                 to='/register' 
                 variant='contained'
                 sx={{
-                  backgroundColor: '#003d82',
+                  background: 'linear-gradient(135deg, #003d82 0%, #0051a8 100%)',
                   color: 'white',
                   fontWeight: 700,
                   borderRadius: 1,
                   px: 2.5,
                   textTransform: 'none',
-                  boxShadow: 'none',
+                  boxShadow: '0 2px 4px rgba(0,61,130,0.3)',
                   '&:hover': {
-                    backgroundColor: '#002a5c',
-                    boxShadow: 'none',
+                    background: 'linear-gradient(135deg, #002a5c 0%, #003d82 100%)',
+                    boxShadow: '0 3px 6px rgba(0,61,130,0.4)',
                   }
                 }}
               >
