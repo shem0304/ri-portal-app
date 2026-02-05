@@ -26,6 +26,7 @@ import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
 import AddCommentIcon from "@mui/icons-material/AddComment";
 import InsertDriveFileIcon from "@mui/icons-material/InsertDriveFile";
+import CloseIcon from "@mui/icons-material/Close";
 
 // Used to derive "my user id" from the auth token, so we can style messages.
 // (We never display raw UUIDs on the UI.)
@@ -113,6 +114,20 @@ export default function Chat() {
   const [msgs, setMsgs] = React.useState([]);
   const [afterId, setAfterId] = React.useState(0);
 
+  const myUserId = React.useMemo(() => deriveMyUserId(), []);
+
+  // Per-user hidden conversation ids (UI-only delete)
+  const hiddenKey = React.useMemo(() => `chat_hidden_convs_${myUserId || "anon"}`,[myUserId]);
+  const [hiddenConvIds, setHiddenConvIds] = React.useState(() => {
+    try {
+      const raw = localStorage.getItem(hiddenKey);
+      const arr = raw ? JSON.parse(raw) : [];
+      return new Set((Array.isArray(arr) ? arr : []).map((x) => String(x)));
+    } catch {
+      return new Set();
+    }
+  });
+
   const [text, setText] = React.useState("");
   const [users, setUsers] = React.useState([]);
   const [peerUser, setPeerUser] = React.useState(null);
@@ -125,7 +140,13 @@ export default function Chat() {
 
   const [uploading, setUploading] = React.useState(false);
 
-  const myUserId = React.useMemo(() => deriveMyUserId(), []);
+  React.useEffect(() => {
+    try {
+      localStorage.setItem(hiddenKey, JSON.stringify(Array.from(hiddenConvIds)));
+    } catch {
+      // ignore
+    }
+  }, [hiddenConvIds, hiddenKey]);
 
   const userLabelMap = React.useMemo(() => {
     const m = new Map();
@@ -168,12 +189,35 @@ export default function Chat() {
     try {
       const r = await chatListConversations();
       if (!r.ok) throw new Error(r.error || "대화 목록 조회 실패");
-      setConvs(r.conversations || []);
+      const list = r.conversations || [];
+      const filtered = hiddenConvIds.size ? list.filter((c) => !hiddenConvIds.has(String(c?.id))) : list;
+      setConvs(filtered);
       setError("");
     } catch (e) {
       setError(String(e?.message || e));
     }
-  }, []);
+  }, [hiddenConvIds]);
+
+  function onDeleteConversation(e, conversationId) {
+    e?.stopPropagation?.();
+    const cid = String(conversationId || "").trim();
+    if (!cid) return;
+
+    const ok = window.confirm("이 대화를 목록에서 삭제할까요?\n(서버에서 완전히 삭제되지 않을 수 있습니다.)");
+    if (!ok) return;
+
+    setHiddenConvIds((prev) => {
+      const next = new Set(prev);
+      next.add(cid);
+      return next;
+    });
+    setConvs((prev) => (Array.isArray(prev) ? prev.filter((c) => String(c?.id) !== cid) : prev));
+    if (String(activeId) === cid) {
+      setActiveId(null);
+      setMsgs([]);
+      setAfterId(0);
+    }
+  }
 
   const loadMessages = React.useCallback(
     async (conversationId, { reset = false } = {}) => {
@@ -507,6 +551,20 @@ export default function Chat() {
                           color: '#333',
                         }}
                       />
+
+                      {/* 오른쪽 삭제 버튼 */}
+                      <IconButton
+                        size="small"
+                        aria-label="대화 삭제"
+                        onClick={(e) => onDeleteConversation(e, c.id)}
+                        sx={{
+                          ml: 1,
+                          color: '#999',
+                          '&:hover': { color: '#d32f2f', backgroundColor: 'rgba(211,47,47,0.08)' },
+                        }}
+                      >
+                        <CloseIcon sx={{ fontSize: 18 }} />
+                      </IconButton>
                     </ListItemButton>
                   );
                 })}
