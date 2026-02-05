@@ -223,7 +223,7 @@ export default function ReportsPage() {
   const [institute, setInstitute] = React.useState('');
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState('');
-  const [meta, setMeta] = React.useState({ total: 0, limit: 20, offset: 0 });
+  const [meta, setMeta] = React.useState({ total: 0, limit: 21, offset: 0 });
   const [items, setItems] = React.useState([]);
   const [instOptions, setInstOptions] = React.useState([]);
   const [yearOptions, setYearOptions] = React.useState([]);
@@ -518,9 +518,10 @@ export default function ReportsPage() {
                 <Box
                   sx={{
                     display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 400px))',
                     gap: 3,
                     mb: 4,
+                    justifyContent: 'start',
                   }}
                 >
                   {items.map((it, idx) => (
