@@ -239,87 +239,429 @@ export default function AppLayout() {
   const toggle = () => setMobileOpen(v => !v);
 
   const drawer = (
-    <Box sx={{ height: '100%' }}>
-      <Box component='a' href={PORTAL_HOME_URL} sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1.5, color: 'inherit', textDecoration: 'none' }}>
-        <Avatar sx={{ width: 36, height: 36 }}>RI</Avatar>
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', backgroundColor: 'white' }}>
+      <Box 
+        component='a' 
+        href={PORTAL_HOME_URL} 
+        sx={{ 
+          p: 2.5, 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 1.5, 
+          color: 'inherit', 
+          textDecoration: 'none',
+          borderBottom: '3px solid #003d82',
+          backgroundColor: '#f8f9fa',
+          transition: 'all 0.2s ease',
+          '&:hover': {
+            backgroundColor: '#e9ecef',
+          }
+        }}
+      >
+        <Box
+          sx={{
+            width: 44,
+            height: 44,
+            borderRadius: 1,
+            backgroundColor: '#003d82',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Typography
+            sx={{
+              color: 'white',
+              fontWeight: 900,
+              fontSize: 16,
+              letterSpacing: '1px'
+            }}
+          >
+            RI
+          </Typography>
+        </Box>
         <Box>
-          <Typography variant='subtitle1' sx={{ fontWeight: 700, lineHeight: 1.2 }}>RI Portal</Typography>
-          <Typography variant='caption' color='text.secondary'>지자체연구원 통합 포털</Typography>
+          <Typography 
+            variant='subtitle1' 
+            sx={{ 
+              fontWeight: 900, 
+              lineHeight: 1.2,
+              color: '#003d82',
+              fontSize: 15,
+              letterSpacing: '-0.3px'
+            }}
+          >
+            RI Portal
+          </Typography>
+          <Typography 
+            variant='caption' 
+            sx={{ 
+              color: '#666',
+              fontWeight: 500,
+              fontSize: 10,
+              letterSpacing: '0.3px'
+            }}
+          >
+            지자체연구원 통합 포털
+          </Typography>
         </Box>
       </Box>
-      <Divider />
-      <List sx={{ p: 1 }}>
-        <ListItemButton component={NavLink} to='/' end>
-          <ListItemIcon><AccountBalanceIcon /></ListItemIcon>
-          <ListItemText primary='기관' secondary='지자체·정부출연' />
+      <Divider sx={{ borderColor: '#e0e0e0' }} />
+      <List sx={{ p: 1, flex: 1 }}>
+        <ListItemButton 
+          component={NavLink} 
+          to='/' 
+          end
+          sx={{
+            borderLeft: '4px solid transparent',
+            pl: 2,
+            mb: 0.5,
+            '&.active': {
+              backgroundColor: '#f0f4f8',
+              borderLeftColor: '#003d82',
+              '& .MuiListItemIcon-root': { color: '#003d82' },
+              '& .MuiListItemText-primary': { color: '#003d82', fontWeight: 700 },
+            },
+            '&:hover': {
+              backgroundColor: '#f8f9fa',
+            },
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
+            <AccountBalanceIcon />
+          </ListItemIcon>
+          <ListItemText 
+            primary='기관' 
+            secondary='지자체·정부출연'
+            primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
+            secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+          />
         </ListItemButton>
-        <ListItemButton component={NavLink} to='/trends'>
-          <ListItemIcon><TrendingUpIcon /></ListItemIcon>
-          <ListItemText primary='연구 트렌드' secondary='키워드·네트워크·버스트' />
+        <ListItemButton 
+          component={NavLink} 
+          to='/trends'
+          sx={{
+            borderLeft: '4px solid transparent',
+            pl: 2,
+            mb: 0.5,
+            '&.active': {
+              backgroundColor: '#f0f4f8',
+              borderLeftColor: '#003d82',
+              '& .MuiListItemIcon-root': { color: '#003d82' },
+              '& .MuiListItemText-primary': { color: '#003d82', fontWeight: 700 },
+            },
+            '&:hover': {
+              backgroundColor: '#f8f9fa',
+            },
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
+            <TrendingUpIcon />
+          </ListItemIcon>
+          <ListItemText 
+            primary='연구 트렌드' 
+            secondary='키워드·네트워크·버스트'
+            primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
+            secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+          />
         </ListItemButton>
-        <ListItemButton component={NavLink} to='/reports'>
-          <ListItemIcon><ScienceIcon /></ListItemIcon>
-          <ListItemText primary='연구보고서' secondary={user ? '로그인됨' : '로그인 필요'} />
+        <ListItemButton 
+          component={NavLink} 
+          to='/reports'
+          sx={{
+            borderLeft: '4px solid transparent',
+            pl: 2,
+            mb: 0.5,
+            '&.active': {
+              backgroundColor: '#f0f4f8',
+              borderLeftColor: '#003d82',
+              '& .MuiListItemIcon-root': { color: '#003d82' },
+              '& .MuiListItemText-primary': { color: '#003d82', fontWeight: 700 },
+            },
+            '&:hover': {
+              backgroundColor: '#f8f9fa',
+            },
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
+            <ScienceIcon />
+          </ListItemIcon>
+          <ListItemText 
+            primary='연구보고서' 
+            secondary={user ? '로그인됨' : '로그인 필요'}
+            primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
+            secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+          />
         </ListItemButton>
 
-        <ListItemButton component={NavLink} to='/researchers'>
-          <ListItemIcon><PersonSearchIcon /></ListItemIcon>
-          <ListItemText primary='연구자 찾기' secondary='전문분야·기관·성과' />
+        <ListItemButton 
+          component={NavLink} 
+          to='/researchers'
+          sx={{
+            borderLeft: '4px solid transparent',
+            pl: 2,
+            mb: 0.5,
+            '&.active': {
+              backgroundColor: '#f0f4f8',
+              borderLeftColor: '#003d82',
+              '& .MuiListItemIcon-root': { color: '#003d82' },
+              '& .MuiListItemText-primary': { color: '#003d82', fontWeight: 700 },
+            },
+            '&:hover': {
+              backgroundColor: '#f8f9fa',
+            },
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
+            <PersonSearchIcon />
+          </ListItemIcon>
+          <ListItemText 
+            primary='연구자 찾기' 
+            secondary='전문분야·기관·성과'
+            primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
+            secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+          />
         </ListItemButton>
 
         {user ? (
-          <ListItemButton component={NavLink} to='/chat' onClick={() => { markAllSeen(); }}>
-            <ListItemIcon>
-              <Badge badgeContent={unreadCount} color='primary' invisible={!unreadCount}>
+          <ListItemButton 
+            component={NavLink} 
+            to='/chat' 
+            onClick={() => { markAllSeen(); }}
+            sx={{
+              borderLeft: '4px solid transparent',
+              pl: 2,
+              mb: 0.5,
+              '&.active': {
+                backgroundColor: '#f0f4f8',
+                borderLeftColor: '#003d82',
+                '& .MuiListItemIcon-root': { color: '#003d82' },
+                '& .MuiListItemText-primary': { color: '#003d82', fontWeight: 700 },
+              },
+              '&:hover': {
+                backgroundColor: '#f8f9fa',
+              },
+              transition: 'all 0.2s ease',
+            }}
+          >
+            <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
+              <Badge badgeContent={unreadCount} color='error' invisible={!unreadCount}>
                 <ChatIcon />
               </Badge>
             </ListItemIcon>
-            <ListItemText primary='채팅' secondary='등록된 사용자 간 대화' />
+            <ListItemText 
+              primary='채팅' 
+              secondary='등록된 사용자 간 대화'
+              primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
+              secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+            />
           </ListItemButton>
         ) : null}
 
+        {user && (user.role || 'user') === 'admin' ? (
+          <>
+            <Divider sx={{ my: 1.5, borderColor: '#e0e0e0' }} />
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                px: 2, 
+                py: 1, 
+                display: 'block', 
+                color: '#999',
+                fontWeight: 700,
+                fontSize: 11,
+                letterSpacing: '0.5px'
+              }}
+            >
+              관리자 메뉴
+            </Typography>
+          </>
+        ) : null}
+
 {user && (user.role || 'user') === 'admin' ? (
-  <ListItemButton component={NavLink} to='/admin/users'>
-    <ListItemIcon><AdminPanelSettingsIcon /></ListItemIcon>
-    <ListItemText primary='관리자' secondary='사용자 승인·관리' />
+  <ListItemButton 
+    component={NavLink} 
+    to='/admin/users'
+    sx={{
+      borderLeft: '4px solid transparent',
+      pl: 2,
+      mb: 0.5,
+      '&.active': {
+        backgroundColor: '#f3e5f5',
+        borderLeftColor: '#7b1fa2',
+        '& .MuiListItemIcon-root': { color: '#7b1fa2' },
+        '& .MuiListItemText-primary': { color: '#7b1fa2', fontWeight: 700 },
+      },
+      '&:hover': {
+        backgroundColor: '#f8f9fa',
+      },
+      transition: 'all 0.2s ease',
+    }}
+  >
+    <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
+      <AdminPanelSettingsIcon />
+    </ListItemIcon>
+    <ListItemText 
+      primary='관리자' 
+      secondary='사용자 승인·관리'
+      primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
+      secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+    />
   </ListItemButton>
 ) : null}
 
 {user && (user.role || 'user') === 'admin' ? (
-  <ListItemButton component={NavLink} to='/admin/stopwords'>
-    <ListItemIcon><SpellcheckIcon /></ListItemIcon>
-    <ListItemText primary='불용어 관리' secondary='트렌드 분석 제외어' />
+  <ListItemButton 
+    component={NavLink} 
+    to='/admin/stopwords'
+    sx={{
+      borderLeft: '4px solid transparent',
+      pl: 2,
+      mb: 0.5,
+      '&.active': {
+        backgroundColor: '#f3e5f5',
+        borderLeftColor: '#7b1fa2',
+        '& .MuiListItemIcon-root': { color: '#7b1fa2' },
+        '& .MuiListItemText-primary': { color: '#7b1fa2', fontWeight: 700 },
+      },
+      '&:hover': {
+        backgroundColor: '#f8f9fa',
+      },
+      transition: 'all 0.2s ease',
+    }}
+  >
+    <ListItemIcon sx={{ minWidth: 40, color: '#666' }}>
+      <SpellcheckIcon />
+    </ListItemIcon>
+    <ListItemText 
+      primary='불용어 관리' 
+      secondary='트렌드 분석 제외어'
+      primaryTypographyProps={{ fontWeight: 600, fontSize: 14, color: '#333' }}
+      secondaryTypographyProps={{ fontSize: 12, color: '#888' }}
+    />
   </ListItemButton>
 ) : null}
 
       </List>
-      <Divider />
-      <Box sx={{ p: 2 }}>
-        <Typography variant='caption' color='text.secondary'>© 2026 RI Portal</Typography>
+      <Divider sx={{ borderColor: '#e0e0e0' }} />
+      <Box 
+        sx={{ 
+          p: 2,
+          backgroundColor: '#f8f9fa',
+          borderTop: '1px solid #e0e0e0'
+        }}
+      >
+        <Typography 
+          variant='caption' 
+          sx={{ 
+            color: '#666',
+            display: 'block',
+            fontWeight: 600,
+            textAlign: 'center',
+            fontSize: 11
+          }}
+        >
+          © 2026 RI Portal
+        </Typography>
+        <Typography 
+          variant='caption' 
+          sx={{ 
+            color: '#999',
+            display: 'block',
+            fontSize: 10,
+            textAlign: 'center',
+            mt: 0.5
+          }}
+        >
+          Local Research Institute Portal
+        </Typography>
       </Box>
     </Box>
   );
 
   return (
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      <AppBar position='fixed' sx={{ zIndex: (t) => t.zIndex.drawer + 1 }} color='default' elevation={0}>
-        <Toolbar>
-          <IconButton color='inherit' edge='start' onClick={toggle} sx={{ mr: 1, display: { md: 'none' } }}>
+      <AppBar 
+        position='fixed' 
+        sx={{ 
+          zIndex: (t) => t.zIndex.drawer + 1,
+          backgroundColor: 'white',
+          borderBottom: '3px solid #003d82',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        }} 
+        elevation={0}
+      >
+        <Toolbar sx={{ minHeight: 64 }}>
+          <IconButton 
+            edge='start' 
+            onClick={toggle} 
+            sx={{ 
+              mr: 2, 
+              display: { md: 'none' },
+              color: '#003d82',
+              '&:hover': { backgroundColor: 'rgba(0,61,130,0.05)' }
+            }}
+          >
             <MenuIcon />
           </IconButton>
-          <Typography component='a' href={PORTAL_HOME_URL} variant='h6' sx={{ flexGrow: 1, color: 'inherit', textDecoration: 'none' }}>지자체연구원 통합 포털</Typography>
+          <Typography 
+            component='a' 
+            href={PORTAL_HOME_URL} 
+            variant='h6' 
+            sx={{ 
+              flexGrow: 1, 
+              color: '#003d82', 
+              textDecoration: 'none',
+              fontWeight: 800,
+              letterSpacing: '-0.5px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              '&:hover': { color: '#0051a8' },
+              transition: 'color 0.2s'
+            }}
+          >
+            <Box
+              sx={{
+                width: 40,
+                height: 40,
+                borderRadius: 1,
+                backgroundColor: '#003d82',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <AccountBalanceIcon sx={{ fontSize: 24, color: 'white' }} />
+            </Box>
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 900, color: '#003d82', lineHeight: 1, fontSize: 18 }}>
+                지자체연구원 통합 포털
+              </Typography>
+              <Typography variant="caption" sx={{ color: '#666', fontSize: 11, fontWeight: 500 }}>
+                Local Research Institute Portal
+              </Typography>
+            </Box>
+          </Typography>
           {user ? (
             <Tooltip title={unreadCount ? `새 채팅 ${unreadCount}건` : '채팅'}>
               <IconButton
-                color='inherit'
                 onClick={async () => {
                   navigate('/chat');
                   await markAllSeen();
                 }}
                 data-chat-badge
-                sx={{ mr: 1 }}
+                sx={{ 
+                  mr: 1,
+                  color: '#003d82',
+                  '&:hover': { backgroundColor: 'rgba(0,61,130,0.05)' }
+                }}
               >
-                <Badge badgeContent={unreadCount} color='primary' invisible={!unreadCount}>
+                <Badge badgeContent={unreadCount} color='error' invisible={!unreadCount}>
                   <ChatIcon />
                 </Badge>
               </IconButton>
@@ -338,10 +680,14 @@ export default function AppLayout() {
             >
               <span>
                 <IconButton
-                  color='inherit'
                   onClick={enableNotifications}
                   disabled={!('Notification' in window) || notifPerm === 'granted'}
-                  sx={{ mr: 1 }}
+                  sx={{ 
+                    mr: 2,
+                    color: notifPerm === 'granted' ? '#003d82' : '#999',
+                    '&:hover': { backgroundColor: 'rgba(0,61,130,0.05)' },
+                    '&.Mui-disabled': { color: '#ccc' }
+                  }}
                   aria-label='채팅 알림'
                 >
                   {notifPerm === 'granted' ? <NotificationsActiveIcon /> : <NotificationsNoneIcon />}
@@ -352,14 +698,103 @@ export default function AppLayout() {
 
           {user ? (
             <>
-              <Avatar sx={{ width: 28, height: 28, mr: 1 }}>{((user.name || user.username || 'U')[0] || 'U').toUpperCase()}</Avatar>
-              <Typography variant='body2' sx={{ mr: 2 }}>{user.name || user.username}</Typography>
-              <Button variant='outlined' onClick={() => { logout(); navigate('/'); }}>로그아웃</Button>
+              <Box 
+                sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 1, 
+                  mr: 2,
+                  px: 2,
+                  py: 1,
+                  borderRadius: 1,
+                  border: '1px solid',
+                  borderColor: '#e0e0e0',
+                  backgroundColor: '#f8f9fa',
+                }}
+              >
+                <Avatar 
+                  sx={{ 
+                    width: 28, 
+                    height: 28,
+                    backgroundColor: '#003d82',
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: 13
+                  }}
+                >
+                  {((user.name || user.username || 'U')[0] || 'U').toUpperCase()}
+                </Avatar>
+                <Typography 
+                  variant='body2' 
+                  sx={{ 
+                    fontWeight: 600,
+                    color: '#333'
+                  }}
+                >
+                  {user.name || user.username}
+                </Typography>
+              </Box>
+              <Button 
+                variant='outlined' 
+                onClick={() => { logout(); navigate('/'); }}
+                sx={{
+                  borderColor: '#003d82',
+                  color: '#003d82',
+                  fontWeight: 700,
+                  borderRadius: 1,
+                  px: 2,
+                  textTransform: 'none',
+                  '&:hover': {
+                    borderColor: '#003d82',
+                    backgroundColor: '#f0f4f8',
+                  }
+                }}
+              >
+                로그아웃
+              </Button>
             </>
           ) : (
             <>
-              <Button component={RouterLink} to='/login' variant='outlined' sx={{ mr: 1 }}>로그인</Button>
-              <Button component={RouterLink} to='/register' variant='contained'>등록</Button>
+              <Button 
+                component={RouterLink} 
+                to='/login' 
+                variant='outlined' 
+                sx={{ 
+                  mr: 1,
+                  borderColor: '#003d82',
+                  color: '#003d82',
+                  fontWeight: 700,
+                  borderRadius: 1,
+                  px: 2.5,
+                  textTransform: 'none',
+                  '&:hover': {
+                    borderColor: '#003d82',
+                    backgroundColor: '#f0f4f8',
+                  }
+                }}
+              >
+                로그인
+              </Button>
+              <Button 
+                component={RouterLink} 
+                to='/register' 
+                variant='contained'
+                sx={{
+                  backgroundColor: '#003d82',
+                  color: 'white',
+                  fontWeight: 700,
+                  borderRadius: 1,
+                  px: 2.5,
+                  textTransform: 'none',
+                  boxShadow: 'none',
+                  '&:hover': {
+                    backgroundColor: '#002a5c',
+                    boxShadow: 'none',
+                  }
+                }}
+              >
+                회원가입
+              </Button>
             </>
           )}
         </Toolbar>
@@ -371,20 +806,44 @@ export default function AppLayout() {
           open={mobileOpen}
           onClose={toggle}
           ModalProps={{ keepMounted: true }}
-          sx={{ display: { xs: 'block', md: 'none' }, '& .MuiDrawer-paper': { width: drawerWidth } }}
+          sx={{ 
+            display: { xs: 'block', md: 'none' }, 
+            '& .MuiDrawer-paper': { 
+              width: drawerWidth,
+              boxShadow: '2px 0 8px rgba(0,0,0,0.1)',
+              backgroundColor: 'white',
+            } 
+          }}
         >
           {drawer}
         </Drawer>
         <Drawer
           variant='permanent'
-          sx={{ display: { xs: 'none', md: 'block' }, '& .MuiDrawer-paper': { width: drawerWidth, boxSizing: 'border-box' } }}
+          sx={{ 
+            display: { xs: 'none', md: 'block' }, 
+            '& .MuiDrawer-paper': { 
+              width: drawerWidth, 
+              boxSizing: 'border-box',
+              borderRight: '1px solid #e0e0e0',
+              backgroundColor: 'white',
+            } 
+          }}
           open
         >
           {drawer}
         </Drawer>
       </Box>
 
-      <Box component='main' sx={{ flexGrow: 1, p: 2.5, mt: 8, backgroundColor: '#f6f7fb' }}>
+      <Box 
+        component='main' 
+        sx={{ 
+          flexGrow: 1, 
+          p: 3, 
+          mt: '64px',
+          backgroundColor: '#f5f7fa',
+          minHeight: 'calc(100vh - 64px)',
+        }}
+      >
         <Outlet />
       </Box>
     </Box>
