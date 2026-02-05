@@ -588,6 +588,18 @@ export default function AppLayout() {
         >
           Local Research Institute Portal
         </Typography>
+        <Typography 
+          variant='caption' 
+          sx={{ 
+            color: '#999',
+            display: 'block',
+            fontSize: 10,
+            textAlign: 'center',
+            mt: 0.5
+          }}
+        >
+          e-mail : shem0304@uri.re.kr
+        </Typography>
       </Box>
     </Box>
   );
