@@ -575,8 +575,11 @@ export default function ResearchersPage() {
               </AccordionSummary>
               <AccordionDetails sx={{ backgroundColor: 'white', pt: 2 }}>
                 <Typography variant='body2' sx={{ mb: 1.5, lineHeight: 1.7, color: '#333' }}>
-                  단순 이름 검색이 아니라, 보고서 제목에서 추출한 키워드로 연구자별 <strong>"전문분야 프로파일(TF-IDF)"</strong>을 만들고,
-                  질의(문장형 입력 포함)와의 유사도 + 최근 활동 + 성과(보고서 수) + 협업 신호를 결합해 순위를 계산합니다.
+                  단순 이름 검색이 아니라, 보고서 제목에서 추출한 키워드로 연구자별 <strong>"전문분야 프로파일(TF‑IDF)"</strong>을 만들고
+                  질의(문장형 입력 포함)와의 <strong>전문분야 유사도</strong>·<strong>키워드 커버리지</strong>를 기본으로,
+                  <strong>최근 활동</strong>과 <strong>성과(보고서 수)</strong>를 보조 신호로 결합해 순위를 계산합니다.
+	                  또한 동일 보고서 내에서 <strong>연구책임자(첫 번째 저자) 기여</strong>는 참여연구진보다 더 크게 반영되도록(예: 연구책임자 1.6, 참여연구진 1.0 가중치) 설계되어
+                  실제 과제 수행 경험이 많은 연구자가 상단에 노출될 가능성이 높습니다.
                 </Typography>
                 <Box
                   sx={{

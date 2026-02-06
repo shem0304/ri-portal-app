@@ -631,6 +631,19 @@ function normalize0to1(x, lo, hi) {
   return Math.max(0, Math.min(1, v));
 }
 
+
+// Helper name kept unique to prevent "Identifier has already been declared"
+// when this file is accidentally merged/duplicated during manual edits.
+function _sigmoid(z) {
+  // Numerically-stable logistic
+  if (z >= 0) {
+    const ez = Math.exp(-z);
+    return 1 / (1 + ez);
+  }
+  const ez = Math.exp(z);
+  return ez / (1 + ez);
+}
+
 export function searchResearchers(store, { q = '', scope = 'all', institute, sort = 'relevance', limit = 24, offset = 0 } = {}) {
   const lim = Math.max(1, Math.min(200, Number(limit) || 24));
   const off = Math.max(0, Number(offset) || 0);
@@ -723,20 +736,40 @@ export function searchResearchers(store, { q = '', scope = 'all', institute, sor
     if (coverage >= 0.5 && tokensForCoverage.length) reasons.push('질의 키워드 커버리지 높음');
     if ((r.reportCount || 0) >= 5) reasons.push('성과(보고서) 다수');
     if (r.lastActiveYear && r.lastActiveYear >= 2022) reasons.push('최근 활동');
+    if ((r.__leadReportCount || 0) > 0) reasons.push('연구책임자(첫 저자) 기여 가중치(1.6배) 반영');
 
-    // Confidence: 0..1 (relative)
-    // Calibrate to typical similarity ranges; keep conservative.
-    const conf = Math.max(
-      normalize0to1(sim, 0.05, 0.55) * 0.65 + normalize0to1(coverage, 0.1, 0.8) * 0.25 + normalize0to1(productivity, 0.5, 2.5) * 0.10,
-      0
-    );
+    // Confidence (0..1): *신뢰도* 지표입니다. '정답 확률'이 아니라
+    // 질의-연구자 프로필의 근거(유사도/키워드 커버리지/성과/근거량)를 보수적으로 요약합니다.
+    const matchedKwCount = matched.length;
+    const rc = (r.reportCount || 0);
+
+    const simN = normalize0to1(sim, 0.10, 0.60);
+    const covN = normalize0to1(coverage, 0.15, 0.80);
+    const prodN = normalize0to1(productivity, 0.30, 2.20);
+    const evidenceN = 0.5 * normalize0to1(Math.log(1 + rc), 0, Math.log(1 + 15)) +
+      0.5 * normalize0to1(matchedKwCount, 0, 6);
+
+    // base: 0..1
+    const base = simN * 0.55 + covN * 0.20 + prodN * 0.15 + evidenceN * 0.10;
+
+    // Logistic calibration: 극단값(95%+)이 잘 나오지 않도록 캡을 둠
+    let conf = 0.05 + 0.90 * _sigmoid((base - 0.55) * 5);
+
+    // 근거가 적을수록 보수적으로(연구자 수용성을 위해 과신 방지)
+    if (rc < 2) conf *= 0.85;
+    if (matchedKwCount < 2) conf *= 0.85;
+
+    conf = Math.max(0.05, Math.min(0.92, conf));
+
+    if (rc < 2 || matchedKwCount < 2) reasons.push('근거 데이터가 적어 신뢰도 보수적');
+
 
     return {
       ...r,
       __score: score,
       __sim: sim,
       __coverage: coverage,
-      __confidence: Math.max(0, Math.min(1, conf)),
+      __confidence: conf,
       __matchedKeywords: matched.slice(0, 6).map(([k]) => k),
       __reasons: reasons,
     };
