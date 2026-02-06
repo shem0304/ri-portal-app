@@ -17,10 +17,12 @@ import {
   Badge,
   Chip,
   Container,
+  Fade,
 } from "@mui/material";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SendIcon from "@mui/icons-material/Send";
 import ChatIcon from "@mui/icons-material/Chat";
+import QuestionAnswerIcon from "@mui/icons-material/QuestionAnswer";
 import PersonIcon from "@mui/icons-material/Person";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import FiberManualRecordIcon from "@mui/icons-material/FiberManualRecord";
@@ -299,42 +301,57 @@ async function onDeleteConversation(conversationId) {
     <Box sx={{ backgroundColor: '#f5f7fa', minHeight: '100vh', py: 4 }}>
       <Container maxWidth="xl">
         {/* 헤더 */}
-        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-          <Box
-            sx={{
-              width: 48,
-              height: 48,
-              borderRadius: 2,
-              backgroundColor: '#003d82',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <ChatIcon sx={{ fontSize: 28, color: 'white' }} />
-          </Box>
-          <Box>
-            <Typography variant='h5' sx={{ fontWeight: 900, color: '#003d82', lineHeight: 1.2 }}>
-              채팅
-            </Typography>
-            <Typography variant='caption' sx={{ color: '#666', fontWeight: 600 }}>
-              등록된 사용자 간 실시간 메시지
-            </Typography>
-          </Box>
-        </Stack>
+        <Fade in timeout={500}>
+          <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
+            <Box
+              sx={{
+                width: 56,
+                height: 56,
+                borderRadius: 3,
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
+              }}
+            >
+              <QuestionAnswerIcon sx={{ fontSize: 32, color: 'white' }} />
+            </Box>
+            <Box>
+              <Typography 
+                variant='h4' 
+                sx={{ 
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                  lineHeight: 1.2,
+                  mb: 0.5,
+                }}
+              >
+                채팅
+              </Typography>
+              <Typography variant='body2' sx={{ color: 'text.secondary', fontWeight: 600 }}>
+                등록된 사용자 간 실시간 메시지
+              </Typography>
+            </Box>
+          </Stack>
+        </Fade>
 
         {error ? (
-          <Alert 
-            severity="error" 
-            sx={{ 
-              mb: 2, 
-              borderRadius: 2,
-              border: '1px solid #ef5350',
-            }}
-            onClose={() => setError("")}
-          >
-            {error}
-          </Alert>
+          <Fade in>
+            <Alert 
+              severity="error" 
+              sx={{ 
+                mb: 2, 
+                borderRadius: 2,
+                border: '1px solid #ef5350',
+              }}
+              onClose={() => setError("")}
+            >
+              {error}
+            </Alert>
+          </Fade>
         ) : null}
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={3}>
@@ -351,8 +368,8 @@ async function onDeleteConversation(conversationId) {
             {/* 새 대화 시작 */}
             <Box sx={{ p: 2.5, backgroundColor: '#f8f9fa', borderBottom: '1px solid #e0e0e0' }}>
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.5 }}>
-                <AddCommentIcon sx={{ fontSize: 20, color: '#003d82' }} />
-                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#003d82' }}>
+                <AddCommentIcon sx={{ fontSize: 20, color: '#667eea' }} />
+                <Typography variant="subtitle2" sx={{ fontWeight: 800, color: '#667eea' }}>
                   새 대화 시작
                 </Typography>
               </Stack>
@@ -384,7 +401,7 @@ async function onDeleteConversation(conversationId) {
                             sx={{ 
                               width: 32, 
                               height: 32, 
-                              backgroundColor: '#003d82',
+                              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                               fontSize: 13,
                               fontWeight: 700,
                             }}
@@ -429,14 +446,16 @@ async function onDeleteConversation(conversationId) {
                   onClick={onStartDm} 
                   disabled={!peerUser?.id}
                   sx={{
-                    backgroundColor: '#003d82',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     fontWeight: 700,
-                    borderRadius: 1,
+                    borderRadius: 2,
                     textTransform: 'none',
-                    boxShadow: 'none',
+                    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
+                    transition: 'all 0.3s',
                     '&:hover': {
-                      backgroundColor: '#002a5c',
-                      boxShadow: 'none',
+                      background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                      boxShadow: '0 6px 16px rgba(102, 126, 234, 0.4)',
+                      transform: 'translateY(-2px)',
                     },
                   }}
                 >
@@ -459,7 +478,7 @@ async function onDeleteConversation(conversationId) {
                     sx={{ 
                       height: 20, 
                       minWidth: 20,
-                      backgroundColor: '#003d82',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                       color: 'white',
                       fontWeight: 700,
                       fontSize: 11,
@@ -486,7 +505,7 @@ async function onDeleteConversation(conversationId) {
                         borderLeft: '3px solid transparent',
                         '&.Mui-selected': {
                           backgroundColor: '#f0f4f8',
-                          borderLeftColor: '#003d82',
+                          borderLeftColor: '#667eea',
                         },
                         '&:hover': {
                           backgroundColor: '#f8f9fa',
@@ -498,7 +517,9 @@ async function onDeleteConversation(conversationId) {
                           width: 40, 
                           height: 40, 
                           mr: 2,
-                          backgroundColor: activeId === c.id ? '#003d82' : '#e0e0e0',
+                          background: activeId === c.id 
+                            ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                            : '#e0e0e0',
                           color: activeId === c.id ? 'white' : '#666',
                           fontWeight: 700,
                         }}
@@ -585,8 +606,8 @@ async function onDeleteConversation(conversationId) {
             <Box 
               sx={{ 
                 p: 2.5, 
-                backgroundColor: '#003d82',
-                borderBottom: '1px solid #002a5c',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                borderBottom: '1px solid rgba(255,255,255,0.2)',
               }}
             >
               {activeId ? (
@@ -596,7 +617,7 @@ async function onDeleteConversation(conversationId) {
                       width: 40, 
                       height: 40,
                       backgroundColor: 'white',
-                      color: '#003d82',
+                      color: '#667eea',
                       fontWeight: 700,
                     }}
                   >
@@ -652,7 +673,7 @@ async function onDeleteConversation(conversationId) {
                             sx={{ 
                               width: 24, 
                               height: 24,
-                              backgroundColor: '#003d82',
+                              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                               fontSize: 11,
                               fontWeight: 700,
                             }}
@@ -810,7 +831,7 @@ async function onDeleteConversation(conversationId) {
                     border: '1px solid #90caf9',
                   }}
                 >
-                  <Typography variant="caption" sx={{ color: '#003d82', fontWeight: 600 }}>
+                  <Typography variant="caption" sx={{ color: '#667eea', fontWeight: 600 }}>
                     📎 첨부 업로드 중...
                   </Typography>
                 </Box>
@@ -866,15 +887,17 @@ async function onDeleteConversation(conversationId) {
                   endIcon={<SendIcon />}
                   sx={{
                     minWidth: 100,
-                    backgroundColor: '#003d82',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     fontWeight: 700,
-                    borderRadius: 1,
+                    borderRadius: 2,
                     textTransform: 'none',
-                    boxShadow: 'none',
+                    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
                     py: 1.1,
+                    transition: 'all 0.3s',
                     '&:hover': {
-                      backgroundColor: '#002a5c',
-                      boxShadow: 'none',
+                      background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                      boxShadow: '0 6px 16px rgba(102, 126, 234, 0.4)',
+                      transform: 'translateY(-2px)',
                     },
                     '&.Mui-disabled': {
                       backgroundColor: '#e0e0e0',

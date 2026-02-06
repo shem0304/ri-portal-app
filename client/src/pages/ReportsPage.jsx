@@ -1,11 +1,12 @@
 import React from 'react';
 import {
   Box, Button, Card, CardContent, Divider, MenuItem, Pagination, Select,
-  Stack, TextField, Typography, Chip, CircularProgress, InputAdornment, Fade
+  Stack, TextField, Typography, Chip, CircularProgress, InputAdornment, Fade, Paper, Container
 } from '@mui/material';
 import { useLocation } from 'react-router-dom';
 import SearchIcon from '@mui/icons-material/Search';
 import DescriptionIcon from '@mui/icons-material/Description';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import PersonIcon from '@mui/icons-material/Person';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import BusinessIcon from '@mui/icons-material/Business';
@@ -50,11 +51,6 @@ function ReportCard({ item, index }) {
             linear-gradient(145deg, #ffffff 0%, #fafafa 100%)
           `,
           backgroundSize: '20px 20px, 20px 20px, 100% 100%',
-          '&:hover': {
-            transform: 'translateY(-6px)',
-            boxShadow: '0 12px 28px rgba(0,0,0,0.15)',
-            borderColor: scopeColor,
-          },
           '&::before': {
             content: '""',
             position: 'absolute',
@@ -62,7 +58,20 @@ function ReportCard({ item, index }) {
             left: 0,
             right: 0,
             height: 6,
-            background: `linear-gradient(90deg, ${scopeColor} 0%, ${scopeColor}80 100%)`,
+            background: item?.scope === 'local'
+              ? 'linear-gradient(90deg, #667eea 0%, #764ba2 100%)'
+              : 'linear-gradient(90deg, #f093fb 0%, #f5576c 100%)',
+            transform: 'scaleX(0)',
+            transformOrigin: 'left',
+            transition: 'transform 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
+          },
+          '&:hover': {
+            transform: 'translateY(-6px)',
+            boxShadow: '0 12px 28px rgba(0,0,0,0.15)',
+            borderColor: item?.scope === 'local' ? '#667eea' : '#f093fb',
+            '&::before': {
+              transform: 'scaleX(1)',
+            }
           },
         }}
       >
@@ -339,20 +348,44 @@ export default function ReportsPage() {
         >
           <CardContent sx={{ p: 4 }}>
             {/* 헤더 */}
-            <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
-              <DescriptionIcon sx={{ fontSize: 32, color: 'primary.main' }} />
-              <Typography variant="h5" sx={{ fontWeight: 900 }}>
-                연구보고서 검색
+            <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
+              <Box
+                sx={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: 3,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
+                }}
+              >
+                <DescriptionOutlinedIcon sx={{ fontSize: 32, color: 'white' }} />
+              </Box>
+              <Typography 
+                variant='h4' 
+                sx={{ 
+                  fontWeight: 800,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  WebkitBackgroundClip: 'text',
+                  WebkitTextFillColor: 'transparent',
+                }}
+              >
+                연구보고서
               </Typography>
             </Stack>
 
             {/* 필터 섹션 */}
-            <Box
+            <Paper
+              elevation={0}
               sx={{
-                backgroundColor: '#f8f9fa',
-                borderRadius: 3,
                 p: 3,
-                mb: 3,
+                borderRadius: 3,
+                background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)',
+                border: '1px solid',
+                borderColor: 'divider',
+                mb: 4,
               }}
             >
               <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
@@ -450,7 +483,7 @@ export default function ReportsPage() {
                   </Button>
                 </Stack>
               </Stack>
-            </Box>
+            </Paper>
 
             {/* 에러 메시지 */}
             {error && (

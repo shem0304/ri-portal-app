@@ -2,11 +2,12 @@ import React from 'react';
 import {
   Accordion, AccordionDetails, AccordionSummary,
   Box, Button, Card, CardContent, Chip, Divider, Link, MenuItem,
-  Pagination, Select, Stack, TextField, Typography, LinearProgress, Container, InputAdornment, Fade
+  Pagination, Select, Stack, TextField, Typography, LinearProgress, Container, InputAdornment, Fade, Paper
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PersonIcon from '@mui/icons-material/Person';
+import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import BusinessIcon from '@mui/icons-material/Business';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import DescriptionIcon from '@mui/icons-material/Description';
@@ -77,11 +78,12 @@ function ResearcherCard({ item, currentScope = 'all', currentInstitute = '', ind
                     width: 48,
                     height: 48,
                     borderRadius: 2,
-                    backgroundColor: '#003d82',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
+                    boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
                   }}
                 >
                   <PersonIcon sx={{ fontSize: 28, color: 'white' }} />
@@ -122,14 +124,17 @@ function ResearcherCard({ item, currentScope = 'all', currentInstitute = '', ind
               </Stack>
 
               <Chip
-                label={`${matchPct}%`}
+                label={`AI 매칭 ${matchPct}%`}
                 size="small"
                 sx={{
                   height: 28,
-                  backgroundColor: matchPct >= 70 ? '#003d82' : matchPct >= 50 ? '#0051a8' : '#6b9bd1',
-                  color: 'white',
                   fontWeight: 700,
-                  fontSize: 13,
+                  background: matchPct >= 70 
+                    ? 'linear-gradient(135deg, #4caf50 0%, #43a047 100%)'
+                    : matchPct >= 50
+                    ? 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)'
+                    : 'linear-gradient(135deg, #f44336 0%, #d32f2f 100%)',
+                  color: 'white',
                 }}
               />
             </Stack>
@@ -392,38 +397,51 @@ export default function ResearchersPage() {
         >
           <CardContent sx={{ p: 4 }}>
             {/* 헤더 */}
-            <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
+            <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
               <Box
                 sx={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 2,
-                  backgroundColor: '#003d82',
+                  width: 56,
+                  height: 56,
+                  borderRadius: 3,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  boxShadow: '0 4px 12px rgba(102, 126, 234, 0.3)',
                 }}
               >
-                <PersonIcon sx={{ fontSize: 28, color: 'white' }} />
+                <PersonSearchIcon sx={{ fontSize: 32, color: 'white' }} />
               </Box>
               <Box>
-                <Typography variant='h5' sx={{ fontWeight: 900, color: '#003d82', lineHeight: 1.2 }}>
-                  연구자 찾기
+                <Typography 
+                  variant='h4' 
+                  sx={{ 
+                    fontWeight: 800,
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    WebkitBackgroundClip: 'text',
+                    WebkitTextFillColor: 'transparent',
+                    lineHeight: 1.2,
+                    mb: 0.5,
+                  }}
+                >
+                  연구자 검색
                 </Typography>
-                <Typography variant='caption' sx={{ color: '#666', fontWeight: 600 }}>
+                <Typography variant='body2' sx={{ color: 'text.secondary', fontWeight: 600 }}>
                   AI 기반 전문분야 매칭 시스템
                 </Typography>
               </Box>
             </Stack>
 
             {/* 검색 영역 */}
-            <Box
+            <Paper
+              elevation={0}
               sx={{
-                backgroundColor: '#f8f9fa',
-                borderRadius: 3,
                 p: 3,
-                mb: 3,
-                border: '1px solid #e0e0e0',
+                borderRadius: 3,
+                background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)',
+                border: '1px solid',
+                borderColor: 'divider',
+                mb: 4,
               }}
             >
               {/* 검색 필터 라벨 */}
@@ -529,7 +547,7 @@ export default function ResearchersPage() {
                   </Button>
                 </Stack>
               </Stack>
-            </Box>
+            </Paper>
 
             {/* 매칭 방식 설명 */}
             <Accordion
@@ -542,14 +560,14 @@ export default function ResearchersPage() {
               elevation={0}
             >
               <AccordionSummary
-                expandIcon={<ExpandMoreIcon sx={{ color: '#003d82' }} />}
+                expandIcon={<ExpandMoreIcon sx={{ color: '#667eea' }} />}
                 sx={{
                   backgroundColor: '#f8f9fa',
                   borderRadius: 2,
                 }}
               >
                 <Stack direction="row" alignItems="center" spacing={1}>
-                  <InfoOutlinedIcon sx={{ fontSize: 20, color: '#003d82' }} />
+                  <InfoOutlinedIcon sx={{ fontSize: 20, color: '#667eea' }} />
                   <Typography variant='subtitle2' sx={{ fontWeight: 800, color: '#003d82' }}>
                     "최적 연구자" 매칭 방식
                   </Typography>

@@ -8,6 +8,9 @@ import LocationOnIcon from '@mui/icons-material/LocationOn';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { apiFetch } from '../api';
+// Shared enhanced card components
+// (Named exports) from: src/components/EnhancedCards.jsx
+import { EnhancedInstituteCard } from '../components/EnhancedCards';
 
 // Accept common API shapes:
 // - Plain array: [...]
@@ -20,31 +23,6 @@ function normalizeItems(payload) {
   if (payload && Array.isArray(payload.nct)) return payload.nct;
   if (payload && Array.isArray(payload.nst)) return payload.nst;
   return [];
-}
-
-// Simple client-side cache for slow external feeds (press/policy).
-// Cache-first for fast paint, then refresh in background.
-const FEED_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
-function readFeedCache(key) {
-  try {
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object') return null;
-    const { savedAt, payload } = parsed;
-    if (!savedAt || !payload) return null;
-    if (Date.now() - Number(savedAt) > FEED_CACHE_TTL_MS) return null;
-    return payload;
-  } catch {
-    return null;
-  }
-}
-function writeFeedCache(key, payload) {
-  try {
-    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), payload }));
-  } catch {
-    // ignore quota / private mode
-  }
 }
 
 function breakTitleByLength(title, maxLen = 50) {
@@ -60,127 +38,6 @@ function breakTitleByLength(title, maxLen = 50) {
       : (right !== -1 && right <= maxLen + 12 ? right : maxLen);
 
   return t.slice(0, cut).trimEnd() + '\n' + t.slice(cut).trimStart();
-}
-
-function InstituteCard({ name, region, group, url, scope }) {
-  const scopeLabel = scope === 'local' ? '지자체' : scope === 'national' ? '정부출연' : '';
-  const g = group ? String(group).trim() : '';
-  const normGroup = g ? (g.toUpperCase() === 'NRC' ? 'NRC' : g.toUpperCase() === 'NCT' ? 'NCT' : g) : '';
-  const leftLabel = scope === 'national' ? (normGroup || '') : (region || '전체');
-  
-  return (
-    <Fade in timeout={300}>
-      <Card
-        variant="outlined"
-        sx={{
-          borderRadius: 4,
-          height: 180,
-          display: 'flex',
-          flexDirection: 'column',
-          transition: 'all 0.3s ease',
-          border: '1px solid',
-          borderColor: 'divider',
-          background: 'linear-gradient(145deg, #ffffff 0%, #fafafa 100%)',
-          '&:hover': {
-            transform: 'translateY(-4px)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-            borderColor: 'primary.main',
-          },
-        }}
-      >
-        <CardContent sx={{ p: 3, flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {/* 상단 메타 정보 */}
-          <Stack direction="row" spacing={1} alignItems="center">
-            {scope === 'local' ? (
-              <Chip
-                icon={<LocationOnIcon sx={{ fontSize: 16 }} />}
-                label={leftLabel}
-                size="small"
-                sx={{ 
-                  height: 24,
-                  backgroundColor: '#e3f2fd',
-                  color: '#1976d2',
-                  fontWeight: 600
-                }}
-              />
-            ) : (
-              <Chip
-                icon={<BusinessIcon sx={{ fontSize: 16 }} />}
-                label={leftLabel}
-                size="small"
-                sx={{ 
-                  height: 24,
-                  backgroundColor: '#f3e5f5',
-                  color: '#7b1fa2',
-                  fontWeight: 600
-                }}
-              />
-            )}
-            <Chip
-              label={scopeLabel}
-              size="small"
-              variant="outlined"
-              sx={{ height: 24, fontWeight: 500 }}
-            />
-          </Stack>
-
-          {/* 기관명 */}
-          <Box sx={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center' }}>
-            {url ? (
-              <Link
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                underline="none"
-                sx={{
-                  color: 'text.primary',
-                  '&:hover': { color: 'primary.main' },
-                  transition: 'color 0.2s',
-                }}
-              >
-                <Typography
-                  variant="h6"
-                  sx={{
-                    fontWeight: 700,
-                    lineHeight: 1.4,
-                    display: '-webkit-box',
-                    WebkitBoxOrient: 'vertical',
-                    WebkitLineClamp: 2,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {name}
-                </Typography>
-              </Link>
-            ) : (
-              <Typography
-                variant="h6"
-                sx={{
-                  fontWeight: 700,
-                  lineHeight: 1.4,
-                  display: '-webkit-box',
-                  WebkitBoxOrient: 'vertical',
-                  WebkitLineClamp: 2,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {name}
-              </Typography>
-            )}
-          </Box>
-
-          {/* 하단 링크 아이콘 */}
-          {url && (
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-              <OpenInNewIcon sx={{ fontSize: 18, color: 'text.secondary' }} />
-            </Box>
-          )}
-        </CardContent>
-      </Card>
-    </Fade>
-  );
 }
 
 function NewsCard({ title, link, index }) {
@@ -238,6 +95,10 @@ function NewsCard({ title, link, index }) {
   );
 }
 
+// The page renders <InstituteCard .../> in several places.
+// Use the shared enhanced card component to keep styling consistent.
+const InstituteCard = EnhancedInstituteCard;
+
 export default function InstitutesPage() {
   const [query, setQuery] = React.useState('');
   const [scope, setScope] = React.useState('all');
@@ -262,52 +123,17 @@ export default function InstitutesPage() {
       setPressLoading(true);
       setPolicyLoading(true);
       try {
-        // 1) Fast paint: show cached feeds immediately if available
-        const PRESS_CACHE_KEY = 'ri_portal_press_latest_v1';
-        const POLICY_CACHE_KEY = 'ri_portal_policy_latest_v1';
-
-        const cachedPress = readFeedCache(PRESS_CACHE_KEY);
-        if (cachedPress) {
-          setPress(normalizeItems(cachedPress));
-          setPressNote((cachedPress && cachedPress.note) || '');
-          setPressLoading(false);
-        }
-        const cachedPolicy = readFeedCache(POLICY_CACHE_KEY);
-        if (cachedPolicy) {
-          setPolicyNews(normalizeItems(cachedPolicy));
-          setPolicyNote((cachedPolicy && cachedPolicy.note) || '');
-          setPolicyLoading(false);
-        }
-
-        // 2) Always fetch local institutes first (usually fast, internal)
-        const l = await apiFetch('/api/institutes/local');
-        setLocal(normalizeItems(l));
-        setLocalLoading(false);
-
-        // 3) Refresh feeds in background (external calls can be slow)
-        const [pRes, nRes] = await Promise.allSettled([
-          apiFetch('/api/press/latest?limit=10'),
-          apiFetch('/api/news/policy/latest?limit=10'),
+        const [l, p, n] = await Promise.all([
+          apiFetch('/api/institutes/local'),
+          apiFetch('/api/press/latest?limit=10', { cache: 'no-store' }),
+          apiFetch('/api/news/policy/latest?limit=10', { cache: 'no-store' }),
         ]);
-
-        if (pRes.status === 'fulfilled') {
-          const p = pRes.value;
-          setPress(normalizeItems(p));
-          setPressNote((p && p.note) || '');
-          writeFeedCache(PRESS_CACHE_KEY, p);
-        } else if (!cachedPress) {
-          // only keep spinner if we had nothing to show
-          console.error(pRes.reason);
-        }
-        if (nRes.status === 'fulfilled') {
-          const n = nRes.value;
-          setPolicyNews(normalizeItems(n));
-          setPolicyNote((n && n.note) || '');
-          writeFeedCache(POLICY_CACHE_KEY, n);
-        } else if (!cachedPolicy) {
-          console.error(nRes.reason);
-        }
-
+        setLocal(normalizeItems(l));
+        setPress(normalizeItems(p));
+        setPressNote((p && p.note) || '');
+        setPolicyNews(normalizeItems(n));
+        setPolicyNote((n && n.note) || '');
+        setLocalLoading(false);
         setPressLoading(false);
         setPolicyLoading(false);
       } catch (e) {
