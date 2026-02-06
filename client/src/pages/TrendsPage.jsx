@@ -241,6 +241,14 @@ export default function TrendsPage() {
               }}
             >
               <Stack spacing={2}>
+                {/* 검색 필터 라벨 */}
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0 }}>
+                  <FilterListIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+                    검색 필터
+                  </Typography>
+                </Stack>
+
                 {/* 첫 번째 줄: Scope, Institute, Year */}
                 <Stack direction={{ xs: 'column', md: 'row' }} spacing={2}>
                   <Select

@@ -340,12 +340,14 @@ export default function ReportsPage() {
   return (
     <Box sx={{ backgroundColor: '#f8f9fa', minHeight: '100vh', py: 4 }}>
       <Box sx={{ maxWidth: 1400, mx: 'auto', px: 3 }}>
-        <Card
-          sx={{
-            borderRadius: 4,
-            boxShadow: '0 2px 12px rgba(0,0,0,0.08)',
-          }}
-        >
+        <Fade in timeout={500}>
+          <Card
+            sx={{
+              borderRadius: 4,
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            }}
+          >
           <CardContent sx={{ p: 4 }}>
             {/* 헤더 */}
             <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
@@ -410,6 +412,9 @@ export default function ReportsPage() {
                       minWidth: 200,
                       backgroundColor: 'white',
                       borderRadius: 2,
+                      '&:hover': {
+                        boxShadow: '0 4px 12px rgba(102, 126, 234, 0.1)',
+                      },
                     }}
                   >
                     <MenuItem value="all">전체</MenuItem>
@@ -424,6 +429,9 @@ export default function ReportsPage() {
                       minWidth: 250,
                       backgroundColor: 'white',
                       borderRadius: 2,
+                      '&:hover': {
+                        boxShadow: '0 4px 12px rgba(102, 126, 234, 0.1)',
+                      },
                     }}
                   >
                     <MenuItem value="">기관 전체</MenuItem>
@@ -437,6 +445,9 @@ export default function ReportsPage() {
                       minWidth: 150,
                       backgroundColor: 'white',
                       borderRadius: 2,
+                      '&:hover': {
+                        boxShadow: '0 4px 12px rgba(102, 126, 234, 0.1)',
+                      },
                     }}
                   >
                     <MenuItem value="">연도 전체</MenuItem>
@@ -463,6 +474,9 @@ export default function ReportsPage() {
                       backgroundColor: 'white',
                       '& .MuiOutlinedInput-root': {
                         borderRadius: 2,
+                        '&:hover': {
+                          boxShadow: '0 4px 12px rgba(102, 126, 234, 0.1)',
+                        },
                       },
                     }}
                   />
@@ -475,8 +489,14 @@ export default function ReportsPage() {
                     sx={{
                       minWidth: 140,
                       borderRadius: 2,
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                       fontWeight: 700,
                       px: 4,
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 6px 16px rgba(102, 126, 234, 0.4)',
+                      },
                     }}
                   >
                     검색
@@ -583,6 +603,7 @@ export default function ReportsPage() {
             )}
           </CardContent>
         </Card>
+        </Fade>
       </Box>
     </Box>
   );
