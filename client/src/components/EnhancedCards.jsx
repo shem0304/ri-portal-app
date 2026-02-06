@@ -103,38 +103,7 @@ export function EnhancedInstituteCard({ name, region, group, url, scope }) {
 
           {/* 기관명 */}
           <Box sx={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center' }}>
-            {url ? (
-              <Link
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                underline="none"
-                sx={{
-                  color: 'text.primary',
-                  transition: 'color 0.3s',
-                  '&:hover': { 
-                    color: scope === 'local' ? '#667eea' : '#f093fb',
-                  },
-                }}
-              >
-                <Typography
-                  variant="h6"
-                  sx={{
-                    fontWeight: 800,
-                    lineHeight: 1.4,
-                    display: '-webkit-box',
-                    WebkitBoxOrient: 'vertical',
-                    WebkitLineClamp: 3,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    fontSize: '1.1rem',
-                  }}
-                >
-                  {name}
-                </Typography>
-              </Link>
-            ) : (
-              <Typography
+            <Typography
                 variant="h6"
                 sx={{
                   fontWeight: 800,
@@ -149,12 +118,18 @@ export function EnhancedInstituteCard({ name, region, group, url, scope }) {
               >
                 {name}
               </Typography>
-            )}
           </Box>
 
           {/* 하단 링크 */}
           {url && (
-            <Stack 
+            <Link
+              href={url}
+              target="_blank"
+              rel="noreferrer"
+              underline="none"
+              sx={{ display: 'inline-flex', alignItems: 'center' }}
+            >
+              <Stack 
               direction="row" 
               spacing={0.5} 
               alignItems="center" 
@@ -171,6 +146,7 @@ export function EnhancedInstituteCard({ name, region, group, url, scope }) {
               </Typography>
               <OpenInNewIcon sx={{ fontSize: 16 }} />
             </Stack>
+            </Link>
           )}
         </CardContent>
       </Card>
