@@ -388,13 +388,14 @@ export default function ResearchersPage() {
   return (
     <Box sx={{ backgroundColor: '#f5f7fa', minHeight: '100vh', py: 4 }}>
       <Container maxWidth="xl">
-        <Card
-          sx={{
-            borderRadius: 4,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-            border: '1px solid #e0e0e0',
-          }}
-        >
+        <Fade in timeout={500}>
+          <Card
+            sx={{
+              borderRadius: 4,
+              background: 'linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%)',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
+            }}
+          >
           <CardContent sx={{ p: 4 }}>
             {/* 헤더 */}
             <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 4 }}>
@@ -464,7 +465,10 @@ export default function ResearchersPage() {
                     sx={{
                       minWidth: 180,
                       backgroundColor: 'white',
-                      borderRadius: 1,
+                      borderRadius: 2,
+                      '&:hover': {
+                        boxShadow: '0 4px 12px rgba(102, 126, 234, 0.1)',
+                      },
                     }}
                   >
                     <MenuItem value='all'>전체</MenuItem>
@@ -479,7 +483,10 @@ export default function ResearchersPage() {
                     sx={{
                       minWidth: 260,
                       backgroundColor: 'white',
-                      borderRadius: 1,
+                      borderRadius: 2,
+                      '&:hover': {
+                        boxShadow: '0 4px 12px rgba(102, 126, 234, 0.1)',
+                      },
                     }}
                   >
                     <MenuItem value=''>기관 전체</MenuItem>
@@ -492,7 +499,10 @@ export default function ResearchersPage() {
                     sx={{
                       minWidth: 160,
                       backgroundColor: 'white',
-                      borderRadius: 1,
+                      borderRadius: 2,
+                      '&:hover': {
+                        boxShadow: '0 4px 12px rgba(102, 126, 234, 0.1)',
+                      },
                     }}
                   >
                     <MenuItem value='relevance'>관련도</MenuItem>
@@ -519,7 +529,10 @@ export default function ResearchersPage() {
                     sx={{
                       backgroundColor: 'white',
                       '& .MuiOutlinedInput-root': {
-                        borderRadius: 1,
+                        borderRadius: 2,
+                        '&:hover': {
+                          boxShadow: '0 4px 12px rgba(102, 126, 234, 0.1)',
+                        },
                       },
                     }}
                   />
@@ -531,15 +544,15 @@ export default function ResearchersPage() {
                     disabled={loading}
                     sx={{
                       minWidth: 140,
-                      backgroundColor: '#003d82',
+                      borderRadius: 2,
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                       fontWeight: 700,
-                      borderRadius: 1,
                       textTransform: 'none',
                       px: 4,
-                      boxShadow: 'none',
                       '&:hover': {
-                        backgroundColor: '#002a5c',
-                        boxShadow: 'none',
+                        background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                        transform: 'translateY(-2px)',
+                        boxShadow: '0 6px 16px rgba(102, 126, 234, 0.4)',
                       },
                     }}
                   >
@@ -575,11 +588,8 @@ export default function ResearchersPage() {
               </AccordionSummary>
               <AccordionDetails sx={{ backgroundColor: 'white', pt: 2 }}>
                 <Typography variant='body2' sx={{ mb: 1.5, lineHeight: 1.7, color: '#333' }}>
-                  단순 이름 검색이 아니라, 보고서 제목에서 추출한 키워드로 연구자별 <strong>"전문분야 프로파일(TF‑IDF)"</strong>을 만들고
-                  질의(문장형 입력 포함)와의 <strong>전문분야 유사도</strong>·<strong>키워드 커버리지</strong>를 기본으로,
-                  <strong>최근 활동</strong>과 <strong>성과(보고서 수)</strong>를 보조 신호로 결합해 순위를 계산합니다.
-	                  또한 동일 보고서 내에서 <strong>연구책임자(첫 번째 저자) 기여</strong>는 참여연구진보다 더 크게 반영되도록(예: 연구책임자 1.6, 참여연구진 1.0 가중치) 설계되어
-                  실제 과제 수행 경험이 많은 연구자가 상단에 노출될 가능성이 높습니다.
+                  단순 이름 검색이 아니라, 보고서 제목에서 추출한 키워드로 연구자별 <strong>"전문분야 프로파일(TF-IDF)"</strong>을 만들고,
+                  질의(문장형 입력 포함)와의 유사도 + 최근 활동 + 성과(보고서 수) + 협업 신호를 결합해 순위를 계산합니다.
                 </Typography>
                 <Box
                   sx={{
@@ -735,6 +745,7 @@ export default function ResearchersPage() {
             )}
           </CardContent>
         </Card>
+        </Fade>
       </Container>
     </Box>
   );
