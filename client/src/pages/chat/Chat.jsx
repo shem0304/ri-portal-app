@@ -123,6 +123,7 @@ export default function Chat() {
 
   const [error, setError] = React.useState("");
   const pollRef = React.useRef(null);
+  const msgsFetchRef = React.useRef({ inFlight: false, pending: false, convId: null });
   const usersPollRef = React.useRef(null);
   const fileInputRef = React.useRef(null);
   const messagesEndRef = React.useRef(null);
@@ -164,8 +165,20 @@ export default function Chat() {
       setUsers(r.users || []);
       setError("");
     } catch (e) {
-      setError(String(e?.message || e));
-    }
+        setError(String(e?.message || e));
+      } finally {
+        const st = msgsFetchRef.current;
+        // Only clear if this fetch corresponds to the current conversation
+        if (st.convId === conversationId) {
+          const shouldRerun = st.pending;
+          st.inFlight = false;
+          st.pending = false;
+          if (shouldRerun) {
+            // Rerun once to catch up missed messages while we were in flight
+            void loadMessages(conversationId);
+          }
+        }
+      }
   }, []);
 
   const loadConvs = React.useCallback(async () => {
@@ -182,12 +195,40 @@ export default function Chat() {
   const loadMessages = React.useCallback(
     async (conversationId, { reset = false } = {}) => {
       try {
+        // Prevent overlapping fetches that can cause duplicate appends.
+        // If a fetch is already running for the same conversation, mark pending and return.
+        const st = msgsFetchRef.current;
+        if (st.inFlight && st.convId === conversationId) {
+          st.pending = true;
+          return;
+        }
+        st.inFlight = true;
+        st.pending = false;
+        st.convId = conversationId;
+
         const r = await chatListMessages(conversationId, { afterId: reset ? 0 : afterId, limit: 200 });
         if (!r.ok) throw new Error(r.error || "메시지 조회 실패");
         const newMsgs = r.messages || [];
-        if (reset) setMsgs(newMsgs);
-        else if (newMsgs.length) setMsgs((prev) => [...prev, ...newMsgs]);
-        if (newMsgs.length) setAfterId(newMsgs[newMsgs.length - 1].id);
+
+        // Merge safely to avoid duplicate rendering when multiple fetches overlap
+        // (e.g., polling tick + manual refresh right after sending).
+        if (reset) {
+          setMsgs(newMsgs);
+        } else if (newMsgs.length) {
+          setMsgs((prev) => {
+            const byId = new Map();
+            for (const m2 of prev) byId.set(m2.id, m2);
+            for (const m2 of newMsgs) byId.set(m2.id, m2);
+            const merged = Array.from(byId.values());
+            merged.sort((a, b) => (a.id || 0) - (b.id || 0));
+            return merged;
+          });
+        }
+
+        if (newMsgs.length) {
+          const lastId = newMsgs[newMsgs.length - 1].id;
+          setAfterId((prev) => Math.max(Number(prev || 0), Number(lastId || 0)));
+        }
         setError("");
       } catch (e) {
         setError(String(e?.message || e));
