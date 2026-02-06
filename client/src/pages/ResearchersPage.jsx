@@ -424,7 +424,7 @@ export default function ResearchersPage() {
                     mb: 0.5,
                   }}
                 >
-                  연구자 검색
+                  연구자 찾기
                 </Typography>
                 <Typography variant='body2' sx={{ color: 'text.secondary', fontWeight: 600 }}>
                   AI 기반 전문분야 매칭 시스템
